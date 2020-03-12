@@ -15,7 +15,7 @@ with open(os.path.join(here, "src", "monetate_recommendations", "VERSION")) as v
     version = version_file.read().strip()
 
 setup(
-    name='monetate_recommednations',
+    name='monetate_recommendations',
     version=version,
     packages=find_packages("src"),
     package_dir={"": "src"},

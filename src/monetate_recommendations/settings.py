@@ -126,7 +126,7 @@ STATIC_URL = '/static/'
 # Import config managerment settings ####
 
 try:
-    from etc.monetate_recs_settings import *
+    from etc.recs_settings import *
 except ImportError:
-    print("Not importing etc.dio_settings", file=sys.stderr)
+    print("Not importing etc.recs_settings", file=sys.stderr)
 
