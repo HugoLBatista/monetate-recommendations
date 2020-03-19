@@ -20,7 +20,7 @@ class RecommendationsPrecompute(models.Model):
     precompute_start_time = models.DateTimeField(null=True)
     precompute_end_time = models.DateTimeField(null=True)
     heartbeat_time = models.DateTimeField(null=True) # Last heartbeat time
-    process_complete = models.PositiveSmallIntegerField(choices=constants.COMPLETED_CHOICES, default=0)
+    process_complete = models.PositiveSmallIntegerField(choices=constants.COMPLETED_CHOICES, default=False)
     products_returned = models.IntegerField(default=0) # Number of rows returned from snowflake query
     snowflake_exceptions = models.CharField(max_length=5000, blank=True) # Populated if error occurs while querying snowflake
 
