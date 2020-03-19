@@ -2,6 +2,7 @@ STATUS_PENDING = 'PENDING'
 STATUS_PROCESSING = 'PROCESSING'
 STATUS_COMPLETE = 'COMPLETE'
 STATUS_SKIPPED = 'SKIPPED'  # Files may be skipped if they are older than the latest data loaded into session
+STATUS_SYS_ERROR = 'SYSTEM_ERROR'
 STATUS_TIMEOUT_ERROR = 'TIMEOUT_ERROR'
 STATUS_CHOICES = (
     (STATUS_PENDING, 'Looking for new recommendations'),
@@ -17,8 +18,8 @@ RETRYABLE_STATES = [
 ]
 
 COMPLETED_CHOICES = (
-    (0, 'Process not completed'),
-    (1, 'Process completed'),
+    (True, 'Process completed'),
+    (False, 'Process not completed'),
 )
 
 TEXT_FIELD_MAX_LEN = 2**20
