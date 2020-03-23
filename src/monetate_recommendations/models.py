@@ -16,6 +16,10 @@ class RecommendationsPrecompute(models.Model):
     status = models.CharField(max_length=20, choices=constants.STATUS_CHOICES, default=constants.STATUS_PENDING)
     attempts = models.IntegerField(default=0)
     status_log = models.TextField(blank=True)
+    # TODO Change this to time or int field (it represents the time diff and not
+    # a datetime):
+    #   processing_time = models.TimeField(null=True) # How long did processing take
+    # Don't forget to make the change also in db schema.
     processing_time = models.DateTimeField(null=True) # How long did processing take
     precompute_start_time = models.DateTimeField(null=True)
     precompute_end_time = models.DateTimeField(null=True)
