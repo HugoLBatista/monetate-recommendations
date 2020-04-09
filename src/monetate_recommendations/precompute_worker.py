@@ -18,6 +18,8 @@ import datetime
 import logging
 import os
 import time
+import threading
+import traceback
 
 from django.utils import timezone
 from django.db.models import Q
@@ -40,6 +42,35 @@ def get_hostname():
     # https://docs.python.org/2/library/os.html#os.uname
     import socket
     return socket.gethostname()
+
+
+class JobTimeoutError(Exception):
+    """Raised when a job takes too long to process.  Do not catch this; let it kill the process."""
+    pass
+
+
+class PrecomputeThread(threading.Thread):
+
+    def __init__(self, recommendation):
+        self.recommendation = recommendation
+        self.result = None
+        self.exception = None
+        self.traceback = ""
+        super(PrecomputeThread, self).__init__()
+        self.daemon = True
+        self.connector = None
+
+    def run(self):
+        try:
+            # TODO Implement (Run snowflake query)
+            #   with QuerySnowflakeRecs(self.recommendation) as self.connector:
+            #       self.result = self.connector.run_query() ...
+
+            # TODO Remove once logic implemented
+            time.sleep(2)
+        except Exception as e:
+            self.exception = e
+            self.traceback = traceback.format_exc()
 
 
 class PrecomputeWorker(object):
@@ -183,16 +214,44 @@ class PrecomputeWorker(object):
         return True
 
     def run_work_thread(self):
-        # TODO Implement
         """
         Run work in a child thread.
         In the main thread, heartbeat against the recs table to keep our claim current.
         Return the completed thread.
         """
+        thread = PrecomputeThread(self.recommendation)
+        thread.start()
+
+        while thread.is_alive():
+            self.heartbeat()
+            thread.join(timeout=self.heartbeat_interval)
+        if thread.is_alive():
+            # If the thread is still alive at this point, assume it's never going to complete
+            # or run its cleanup tasks, so make sure we do them here.
+            err_msg = 'Recommendation {} snowflake query timed out'.format(self.recommendation.id)
+            self.log(err_msg)
+            self.recommendation.status = constants.STATUS_TIMEOUT_ERROR
+            if thread.connector is not None:
+                thread.connector.cleanup()
+            raise JobTimeoutError(err_msg)
+        return thread
+
+    def heartbeat(self):
+        """Update heartbeat_time to keep our claim on the file alive"""
+        hb_time = self.recommendation.heartbeat_time = timezone.now()
+        start_time = self.recommendation.precompute_start_time
+        if start_time is not None:
+            self.log('heartbeat {}'.format(hb_time - start_time))
+        self.recommendation.save()
 
     def handle_thread_result(self, thread):
-        # TODO Implement
         """Set status and log according to the results of the work"""
-        self.recommendation.status = constants.STATUS_COMPLETE
-        self.recommendation.process_complete = True
-
+        if thread.exception is not None:
+            self.recommendation.status = constants.STATUS_SYS_ERROR
+            self.log('Threw an error during processing: {}'.format(thread.traceback), level=logging.ERROR)
+            raise thread.exception
+        else:
+            self.recommendation.status = constants.STATUS_COMPLETE
+            self.recommendation.process_complete = True
+            self.recommendation.products_returned = len(thread.result or [])
+            self.log('{} products returned.'.format(self.recommendation.products_returned))
