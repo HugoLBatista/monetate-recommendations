@@ -121,8 +121,8 @@ class PrecomputeWorker(object):
                 self.log('Unexpectedly still in processing', level=logging.ERROR)
                 self.recommendation.status = constants.STATUS_SYS_ERROR
             self.recommendation.precompute_end_time = timezone.now()
-            self.recommendation.processing_time = int((self.recommendation.precompute_end_time - self.recommendation.precompute_start_time).total_seconds())
-            self.log('Finished processing recommendation {} -- elapsed time {}'.format(self.recommendation.id, self.recommendation.processing_time))
+            self.recommendation.processing_time_seconds = int((self.recommendation.precompute_end_time - self.recommendation.precompute_start_time).total_seconds())
+            self.log('Finished processing recommendation {} -- elapsed time {}'.format(self.recommendation.id, self.recommendation.processing_time_seconds))
             self.recommendation.save()
 
     def query_recommendations(self):

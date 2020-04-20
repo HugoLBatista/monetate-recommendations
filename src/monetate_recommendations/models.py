@@ -16,7 +16,7 @@ class RecommendationsPrecompute(models.Model):
     status = models.CharField(max_length=20, choices=constants.STATUS_CHOICES, default=constants.STATUS_PENDING)
     attempts = models.IntegerField(default=0)
     status_log = models.TextField(blank=True)
-    processing_time = models.PositiveIntegerField(null=True) # How long did processing take
+    processing_time_seconds = models.PositiveIntegerField(null=True) # How long did processing take
     precompute_start_time = models.DateTimeField(null=True)
     precompute_end_time = models.DateTimeField(null=True)
     heartbeat_time = models.DateTimeField(null=True) # Last heartbeat time
