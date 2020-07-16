@@ -28,6 +28,7 @@ setup(
     classifiers=[],
     install_requires=[
         "Django>=1.11,<2.0",
+        "monetate-tenant<=0.3"
         "monetate-recs==0.1",
     ],
     extras_require={
