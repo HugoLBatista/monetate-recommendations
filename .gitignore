@@ -26,3 +26,4 @@ changelog/ruby/
 changelog/wiki/
 pip.conf
 .tox/
+test_config

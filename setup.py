@@ -20,7 +20,7 @@ setup(
     packages=find_packages("src"),
     package_dir={"": "src"},
     include_package_data=True,
-    description='Monetate recommednations precompute service',
+    description='Monetate recommendations precompute service',
     long_description=long_description,
     url='https://github.com/monetate/monetate-recommendations',
     author='Kibo Inc.',
@@ -28,6 +28,7 @@ setup(
     classifiers=[],
     install_requires=[
         "Django>=1.11,<2.0",
+        "monetate-recs==0.1",
     ],
     extras_require={
         "test": [
