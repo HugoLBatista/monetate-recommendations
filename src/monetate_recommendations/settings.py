@@ -30,17 +30,31 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+BACKEND_SERVER = ''  # US only backend services
+BACKEND_SERVER_DSA = ''  # US only backend DSA services
+BACKEND_SERVER_GLOBAL = ''  # Global backend services
+BACKEND_SERVER_GLOBAL_DSA = ''  # Global backend DSA services
 
 # Application definition
 
 INSTALLED_APPS = [
-    'monetate_recommendations',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'monetate.system',
+    'monetate.common',
+    'monetate.user',
+    'monetate.script',
+    'monetate.retailer',
+    'monetate.target',
+    'monetate.campaign',
+    'monetate.dataset',
+    'monetate.dio',
+    'monetate.recs',
+    'monetate_recommendations',
 ]
 
 MIDDLEWARE = [
@@ -124,7 +138,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 
-# Import config managerment settings ####
+# Import config management settings ####
 
 try:
     from etc.recs_settings import *

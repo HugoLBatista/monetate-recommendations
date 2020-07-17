@@ -1,5 +1,6 @@
 from django.db import models
 from . import constants
+from monetate.recs.models import RecommendationSet
 
 
 class RecommendationsPrecompute(models.Model):
@@ -10,9 +11,7 @@ class RecommendationsPrecompute(models.Model):
     class Meta(object):
         db_table = 'recs_recommendationprecompute'
 
-    # TODO After creating a package out of recs, import it and change field from int to foreign key:
-    #       recset_id = models.ForeignKey(RecommendationSet)
-    recset_id = models.IntegerField()
+    recset_id = models.ForeignKey(RecommendationSet)
     status = models.CharField(max_length=20, choices=constants.STATUS_CHOICES, default=constants.STATUS_PENDING)
     attempts = models.IntegerField(default=0)
     status_log = models.TextField(blank=True)
