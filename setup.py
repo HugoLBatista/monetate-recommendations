@@ -29,7 +29,7 @@ setup(
     install_requires=[
         "Django>=1.11,<2.0",
         "monetate-tenant<=0.3",
-        "monetate-recs==0.1",
+        "monetate-recs==0.3",
     ],
     extras_require={
         "test": [

@@ -9,6 +9,6 @@ endif
 
 intbox-sync:
 	(host -tA $(INTEGRATIONBOX) > /dev/null && \
-	rsync --delete -crlpv -e ssh --exclude-from .rsync-exclude.txt ./ $(SSHUSER)@$(INTEGRATIONBOX):~/monetate-io/) || \
+	rsync --delete -crlpv -e ssh --exclude-from .rsync-exclude.txt ./ $(SSHUSER)@$(INTEGRATIONBOX):~/monetate-recommendations/) || \
 	(echo "Cannot rsync source to INTEGRATIONBOX=\"$(INTEGRATIONBOX)\"" && false)
 

@@ -18,7 +18,6 @@ import sys
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.11/howto/deployment/checklist/
 
@@ -34,6 +33,7 @@ BACKEND_SERVER = ''  # US only backend services
 BACKEND_SERVER_DSA = ''  # US only backend DSA services
 BACKEND_SERVER_GLOBAL = ''  # Global backend services
 BACKEND_SERVER_GLOBAL_DSA = ''  # Global backend DSA services
+MONETATE_GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoIPCity.dat'
 
 # Application definition
 
@@ -52,9 +52,25 @@ INSTALLED_APPS = [
     'monetate.target',
     'monetate.campaign',
     'monetate.dataset',
+    'monetate.test',
+    'monetate.action',
+    'monetate.content',
+    'monetate.creative',
+    'monetate.key',
+    'monetate.location',
+    'monetate.predictive_testing',
+    'monetate.merch',
+    'monetate.placement',
+    'monetate.event',
+    'monetate.segmentation',
+    'monetate.audience',
+    'monetate.idrec',
+    'monetate.predicate',
+    'monetate.reportv3',
     'monetate.dio',
     'monetate.recs',
     'monetate_recommendations',
+    'monetate.schema',
 ]
 
 MIDDLEWARE = [
@@ -67,7 +83,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'monetate_recommendations_foo.urls'
 
 TEMPLATES = [
     {
@@ -85,18 +100,28 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'monetate_recommendations_foo.wsgi.application'
-
+WSGI_APPLICATION = 'monetate_recommendations.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/1.11/ref/settings/#databases
-
+DATABASE_ROUTERS = ['monetate.common.router.DefaultRouter']
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
         'NAME': 'test_config',
+        'HOST': 'localhost',
+        'PORT': '',
+        'USER': 'root',
+        'PASSWORD': '',
+        'TEST': {
+            'CHARSET': 'utf8',
+            'COLLATION': 'utf8_unicode_ci'
+        },
     },
 }
+
+
+DEFAULT_WAREHOUSE_SCHEMA = 'public'  # replaces sqlalchemy_warehouse.DEFAULT_SCHEMA
 
 
 # Password validation
@@ -129,7 +154,8 @@ USE_I18N = True
 
 USE_L10N = True
 
-USE_TZ = True
+# If you set this to False, Django will not use timezone-aware datetimes.
+USE_TZ = False  # Monetate assumes naive datetime in naive_to_retailer
 
 
 # Static files (CSS, JavaScript, Images)
@@ -144,4 +170,3 @@ try:
     from etc.recs_settings import *
 except ImportError:
     print("Not importing etc.recs_settings", file=sys.stderr)
-
