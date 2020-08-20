@@ -12,7 +12,7 @@ import monetate.dio.models as dio_models
 from monetate_recommendations import product_type_filter_expression
 
 DATA_JURISDICTION = 'recs_global'
-
+SESSION_SHARDS = 8
 
 SNOWFLAKE_UNLOAD = """
 COPY
@@ -149,7 +149,7 @@ def get_shard_range(shard_key):
     """
     min_shard = 0
     max_shard = CLUSTER_MAX
-    n_shards = 8
+    n_shards = SESSION_SHARDS
     shard_size = float(max_shard - min_shard) / n_shards
     shard_boundaries = tuple(int(round(min_shard + i * shard_size)) for i in range(n_shards)) + (max_shard,)
     shard_key = int(shard_key)
