@@ -116,10 +116,10 @@ class PurchaseValueTestCase(RecsTestCase):
         filter_json = json.dumps({"type": "and", "filters": []})
         filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
-            '"{filter_hash}","SKU-00002",1'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00005",2'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00006",3'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00003",4'.format(filter_hash=filter_hash),
+            ('SKU-00002', 1),
+            ('SKU-00005', 2),
+            ('SKU-00006', 3),
+            ('SKU-00003', 4),
         ])
 
     def test_purchase_value_no_geo_30_days(self):
@@ -137,11 +137,11 @@ class PurchaseValueTestCase(RecsTestCase):
         filter_json = json.dumps({"type": "and", "filters": []})
         filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=30, filter_json=filter_json, expected_result=[
-            '"{filter_hash}","SKU-00005",1'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00006",2'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00002",3'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00003",4'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00004",5'.format(filter_hash=filter_hash),
+            ('SKU-00005', 1),
+            ('SKU-00006', 2),
+            ('SKU-00002', 3),
+            ('SKU-00003', 4),
+            ('SKU-00004', 5),
         ])
 
     def test_purchase_value_filter(self):
@@ -170,8 +170,8 @@ class PurchaseValueTestCase(RecsTestCase):
         }]})
         filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
-            '"{filter_hash}","SKU-00005",1'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00006",2'.format(filter_hash=filter_hash),
+            ('SKU-00005', 1),
+            ('SKU-00006', 2),
         ])
 
     def test_purchase_value_filter_multi(self):
@@ -200,8 +200,8 @@ class PurchaseValueTestCase(RecsTestCase):
         }]})
         filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
-            '"{filter_hash}","SKU-00002",1'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00005",2'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00006",3'.format(filter_hash=filter_hash),
-            '"{filter_hash}","SKU-00003",4'.format(filter_hash=filter_hash),
+            ('SKU-00002', 1),
+            ('SKU-00005', 2),
+            ('SKU-00006', 3),
+            ('SKU-00003', 4),
         ])

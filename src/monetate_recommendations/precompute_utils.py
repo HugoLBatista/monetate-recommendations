@@ -3,19 +3,44 @@ import os
 import datetime
 import hashlib
 import json
-from collections import OrderedDict
+import binascii
+import bisect
+from sqlalchemy.sql import text
 from monetate.common.warehouse import sqlalchemy_warehouse
-from monetate.common.warehouse.sqlalchemy_snowflake import normalized_indent_text
+from monetate.common.sqlalchemy_session import CLUSTER_MAX
+import monetate.dio.models as dio_models
+from monetate_recommendations import product_type_filter_expression
 
-SNOWFLAKE_UNLOAD = '''
+DATA_JURISDICTION = 'recs_global'
+
+
+SNOWFLAKE_UNLOAD = """
 COPY
 INTO :target
 FROM (
-{query}
+    WITH ranked_records AS (
+        {query}
+    )
+    SELECT object_construct(
+        'shard_key', :shard_key,
+        'document', object_construct(
+            'pushdown_filter_hash', :filter_hash,
+            'data', (SELECT array_agg(object_construct(*)) FROM ranked_records)
+        ),
+        'sent_time', :sent_time,
+        'account', object_construct(
+            'id', :account_id
+        ),
+        'schema', object_construct(
+            'feed_type', 'RECSET_NONCOLLAB_RECS',
+            'id', :recset_id
+        )
+    )
 )
+FILE_FORMAT = (TYPE = JSON)
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
-'''
+"""
 
 # SKU ranking query used by view, purchase, and purchase_value algorithms
 SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID = """
@@ -23,11 +48,10 @@ WITH
 pid_algo AS (
     /* Aggregates per product_id for an account at appropriate geo_rollup level */
     SELECT
-        :dataset_hash AS lookup_key,
         product_id,
         SUM(subtotal) AS score
     FROM scratch.{algorithm}_{account_id}_{lookback}
-    GROUP BY 1, 2
+    GROUP BY product_id
 ),
 reduced_catalog AS (
     /*
@@ -62,30 +86,34 @@ reduced_catalog AS (
 sku_algo AS (
     /* Explode recommended product ids into recommended representative skus */
     SELECT
-        pid_algo.lookup_key,
         c.id,
         pid_algo.score
     FROM pid_algo
     JOIN reduced_catalog c
-        ON c.item_group_id = pid_algo.product_id
-)
-/* Convert scores into ordinals, limit to top 1000 per lookup ley for later post filtering */
-SELECT
-    lookup_key,
-    id,
-    ordinal
-FROM (
+    ON c.item_group_id = pid_algo.product_id
+),
+ranked_ids AS (
+    /* Convert scores into ordinals, limit to top 1000 per lookup key for later post filtering */
     SELECT
-        lookup_key,
         id,
-        ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id) AS ordinal
-    FROM sku_algo
+        ordinal
+    FROM (
+        SELECT
+            id,
+            ROW_NUMBER() OVER (ORDER BY score DESC, id) AS ordinal
+        FROM sku_algo
+    )
+    WHERE ordinal <= 1000
 )
-WHERE ordinal <= 1000
+SELECT pc.*, ri.ordinal
+FROM product_catalog as pc
+JOIN ranked_ids as ri
+ON pc.id = ri.id
 """
 
 
 def parse_product_type_filter(filter_json):
+    # TODO: In the future this will need to support dyanmic filters
     def _filter_product_type(f):
         is_product_type = f['left']['field'] == 'product_type'
         is_dynamic = f['right']['type'] == 'function'
@@ -97,7 +125,8 @@ def parse_product_type_filter(filter_json):
 
 
 def get_filter_hash(filter_json):
-    return hashlib.sha1(str(filter_json)).hexdigest()
+    # TODO: In the future this will need to support dyanmic filters
+    return hashlib.sha1(filter_json).hexdigest()
 
 
 def create_metric_table(conn, account_id, lookback, query):
@@ -110,46 +139,89 @@ def create_metric_table(conn, account_id, lookback, query):
                  begin_session_time=begin_session_time, end_session_time=end_session_time)
 
 
-def create_unload_target_paths(recset_id):
-    """
-    Format suffix for target path for Snowflake unload.
-    Not inlined so unit tests can get a replicable path.
-    :param schema_id: recommendation dataset id for unload
-    :param dt: unload datetime
-    :return: path suffixes (i.e. the target without the @ stage part) with no leading slash for
-    """
-    # If you're looking for these in s3 and don't see them: dio s3_manager moves files out of the /direct/ dir as it
-    # sees them into the retailer-* directories.
-    stage = getattr(settings, 'RECO_DIO_SNOWFLAKE_STAGE', '@reco_dio_stage_v1')
-    datetime_str = '{dt:%y/%m/%d/%H/%M/%S}'.format(dt=datetime.datetime.now())
-    unload_suffix, manifest_suffix = 'unloaded_data.csv.gz', 'manifest'
-    target_path = os.path.join(stage, repr(recset_id).encode('utf-8'), 'full', datetime_str, 'csv')
-    return os.path.join(target_path, unload_suffix), os.path.join(target_path, manifest_suffix)
+def get_shard_key(account_id):
+    return binascii.crc32(str(account_id)) % CLUSTER_MAX
 
 
-def unload_manifest(conn, source, target):
+def get_shard_range(shard_key):
     """
-    The DIO S3 manager expects redshift style manifest files.
+    See: monetate-io/fileimport/file_importer.py ShardRange
     """
-    conn.execute(normalized_indent_text('''
-        LIST :source
-        '''), source=source)
+    min_shard = 0
+    max_shard = CLUSTER_MAX
+    n_shards = 8
+    shard_size = float(max_shard - min_shard) / n_shards
+    shard_boundaries = tuple(int(round(min_shard + i * shard_size)) for i in range(n_shards)) + (max_shard,)
+    shard_key = int(shard_key)
+    if not min_shard <= shard_key < max_shard:
+        raise ValueError('shard_key {} not within [{}, {}]'.format(shard_key, min_shard, max_shard))
+    hi_idx = bisect.bisect_right(shard_boundaries, shard_key)
+    return shard_boundaries[hi_idx - 1], shard_boundaries[hi_idx]
 
-    conn.execute(normalized_indent_text('''
-        COPY /* unload manifest */
-        INTO :target
-        FROM (
-            SELECT
-                object_construct(
-                    'entries', array_construct(
-                        object_construct(
-                            'url', list."name",
-                            'meta', object_construct('content_length', list."size")
-                        )
-                    )
-                )
-            FROM table(result_scan(last_query_id())) AS list
-        )
-        FILE_FORMAT = (TYPE = JSON, COMPRESSION = NONE)
-        SINGLE = TRUE
-        '''), target=target)
+
+def create_unload_target_path(account_id, recset_id):
+    stage = getattr(settings, 'SNOWFLAKE_DATAIO_STAGE', '@dataio_stage_v1')
+    shard_key = get_shard_key(account_id)
+    vshard_lower, vshard_upper = get_shard_range(shard_key)
+    dt = datetime.datetime.utcnow()
+    interval_duration = 1
+    round_minute = dt.minute - dt.minute % interval_duration
+    bucket_time = dt.replace(minute=round_minute, second=0, microsecond=0)
+    path = '{data_jurisdiction}/{bucket_time:%Y/%m/%d}/{data_jurisdiction}-{bucket_time:%Y%m%dT%H%M%S.000Z}_PT' \
+           '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{recset_id}.json.gz'\
+        .format(data_jurisdiction=DATA_JURISDICTION,
+                bucket_time=bucket_time,
+                interval_duration=interval_duration,
+                vshard_lower=vshard_lower,
+                vshard_upper=vshard_upper,
+                recset_id=recset_id)
+
+    return os.path.join(stage, path), bucket_time
+
+
+def process_noncollab_algorithm(conn, recset, metric_table_query):
+    """
+    Example JSON shape unloaded to s3:
+    {
+        "account":
+        {
+            "id": 1
+        },
+        "document":
+        {
+            "data": [...records],
+            "pushdown_filter_hash": "d27aaa6c61c21f9dc9e99ddceb7a7ac1ba1d6ad3"
+        },
+        "schema":
+        {
+            "feed_type": "RECSET_NONCOLLAB_RECS",
+            'id': 1001
+        },
+        "sent_time": "2020-08-19 16:35:00",
+        "shard_key": 847799
+    }
+    """
+    product_type_filter = parse_product_type_filter(recset.filter_json)
+    filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
+        product_type_filter)
+    catalog_id = recset.product_catalog.id if recset.product_catalog else \
+        dio_models.DefaultAccountCatalog.objects.get(account=recset.account.id).schema.id
+    filter_hash = get_filter_hash(recset.filter_json)
+    create_metric_table(conn, recset.account.id, recset.lookback_days,
+                        text(metric_table_query.format(algorithm=recset.algorithm,
+                                                       account_id=recset.account.id,
+                                                       lookback=recset.lookback_days)))
+    unload_path, send_time = create_unload_target_path(recset.account.id, recset.id)
+    product_rank_query = SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID.format(algorithm=recset.algorithm,
+                                                                   account_id=recset.account.id,
+                                                                   lookback=recset.lookback_days,
+                                                                   filter_query=filter_query)
+    conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query)),
+                 shard_key=get_shard_key(recset.account.id),
+                 account_id=recset.account.id,
+                 recset_id=recset.id,
+                 sent_time=send_time,
+                 target=unload_path,
+                 filter_hash=filter_hash,
+                 catalog_id=catalog_id,
+                 **filter_variables)

@@ -107,29 +107,27 @@ class RecsTestCase(SnowflakeTestCase):
             )
 
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
-        unload_path, manifest_path = precompute_utils.create_unload_target_paths(recset.id)
+        unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
         s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
-        manifest_s3_url = get_stage_s3_uri_prefix(self.conn, manifest_path)
 
         with mock.patch('monetate.common.job_timing.record_job_timing'),\
              mock.patch('contextlib.closing', return_value=self.conn),\
              mock.patch('sqlalchemy.engine.Connection.close'),\
-             mock.patch('monetate_recommendations.precompute_utils.create_unload_target_paths',
+             mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
                         autospec=True) as mock_suffix:
-            mock_suffix.return_value = unload_path, manifest_path
+            mock_suffix.return_value = unload_path, sent_time
             FUNC_MAP[algorithm]([recset])
 
-        # Ensure a manifest file was written (DIO uses this for the complete list of files created)
-        expected_manifest_line = {
-            'entries': [
-                {'url': '', 'meta': {'content_length': 0}}  # NOTE: contents not checked yet
-            ]
-        }
-        actual_manifest = list(s3_filereader2.read_s3(manifest_s3_url))
-        # Only one line expected.
-        self.assertTrue(len(actual_manifest), 1)
-        # Line has an entries key
-        self.assertItemsEqual(json.loads(actual_manifest[0]), expected_manifest_line)
+        actual_result = json.loads([line.strip() for line in s3_filereader2.read_s3_gz(s3_url)][0])
+        # equal number product records vs expected
+        self.assertEqual(len(actual_result['document']['data']), len(expected_result))
+        self.assertEqual(actual_result['account']['id'], recset.account.id)
+        self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
+        self.assertEqual(actual_result['schema']['id'], recset.id)
 
-        actual_result = [line.strip() for line in s3_filereader2.read_s3_gz(s3_url)]
-        self.assertItemsEqual(actual_result, expected_result)
+        # records match expected
+        for item in expected_result:
+            item_match = list(filter(lambda r: r['ID'] == item[0] and r['ORDINAL'] == item[1],
+                                     actual_result['document']['data']))
+            # assert one of each expected result
+            self.assertEqual(len(item_match), 1)
