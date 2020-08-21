@@ -126,8 +126,6 @@ class RecsTestCase(SnowflakeTestCase):
         self.assertEqual(actual_result['schema']['id'], recset.id)
 
         # records match expected
-        for item in expected_result:
-            item_match = list(filter(lambda r: r['ID'] == item[0] and r['ORDINAL'] == item[1],
-                                     actual_result['document']['data']))
-            # assert one of each expected result
-            self.assertEqual(len(item_match), 1)
+        for i, item in enumerate(expected_result):
+            self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
+            self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])

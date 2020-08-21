@@ -25,7 +25,11 @@ FROM (
         'shard_key', :shard_key,
         'document', object_construct(
             'pushdown_filter_hash', :filter_hash,
-            'data', (SELECT array_agg(object_construct(*)) FROM ranked_records)
+            'data', (
+                SELECT array_agg(object_construct(*)) 
+                WITHIN GROUP (ORDER BY RANK ASC) 
+                FROM ranked_records
+            )
         ),
         'sent_time', :sent_time,
         'account', object_construct(
@@ -105,7 +109,7 @@ ranked_ids AS (
     )
     WHERE ordinal <= 1000
 )
-SELECT pc.*, ri.ordinal
+SELECT pc.*, ri.ordinal AS rank
 FROM product_catalog as pc
 JOIN ranked_ids as ri
 ON pc.id = ri.id
