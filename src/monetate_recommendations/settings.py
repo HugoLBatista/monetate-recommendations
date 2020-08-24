@@ -108,7 +108,7 @@ DATABASE_ROUTERS = ['monetate.common.router.DefaultRouter']
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'test_config',
+        'NAME': 'monetate_config',
         'HOST': 'localhost',
         'PORT': '',
         'USER': 'root',
