@@ -3,7 +3,6 @@ django.setup()
 
 from django.core.management.base import BaseCommand
 import monetate_recommendations.precompute_algo_map as precompute_algo_map
-from monetate.recs.models import RecommendationSet
 
 
 class Command(BaseCommand):
@@ -15,13 +14,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         recset_ids = options.get('recset_ids')
-        for recset_id in recset_ids:
-            recset = RecommendationSet.objects.get(id=recset_id)
-            precompute_function = precompute_algo_map.FUNC_MAP.get(recset.algorithm)
-            if recset and precompute_function:
-                print('Processing recset {}...'.format(recset_id))
-                precompute_function(recset)
-            else:
-                print('Could not process recset {}...'.format(recset_id))
+        recsets_by_algorithm = precompute_algo_map.sort_recsets_by_algorithm(recset_ids)
+        for algorithm in recsets_by_algorithm.keys():
+            print('Processing {} recsets...'.format(algorithm))
+            precompute_function = precompute_algo_map.FUNC_MAP.get(algorithm)
+            precompute_function(recsets_by_algorithm[algorithm])
         print('Finished processing {}'.format(recset_ids))
-        self.stdout.write("Unterminated line", ending='')
