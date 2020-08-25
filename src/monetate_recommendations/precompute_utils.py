@@ -41,7 +41,7 @@ FROM (
         )
     )
 )
-FILE_FORMAT = (TYPE = JSON)
+FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
 """
@@ -80,6 +80,7 @@ reduced_catalog AS (
             JOIN config_dataset_data_expiration e
                 ON c.dataset_id = e.dataset_id
             WHERE c.dataset_id = :catalog_id
+                AND c.retailer_id = :retailer_id
                 AND c.update_time >= e.cutoff_time
                 {filter_query}
             GROUP BY 1, 2, 3
@@ -112,7 +113,9 @@ ranked_ids AS (
 SELECT pc.*, ri.ordinal AS rank
 FROM product_catalog as pc
 JOIN ranked_ids as ri
-ON pc.id = ri.id
+    ON pc.id = ri.id
+WHERE pc.retailer_id = :retailer_id
+    AND pc.dataset_id = :catalog_id
 """
 
 
@@ -223,6 +226,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query)),
                  shard_key=get_shard_key(recset.account.id),
                  account_id=recset.account.id,
+                 retailer_id=recset.retailer.id,
                  recset_id=recset.id,
                  sent_time=send_time,
                  target=unload_path,
