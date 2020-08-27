@@ -75,16 +75,18 @@ reduced_catalog AS (
                 c.item_group_id,
                 c.image_link,
                 c.color,
+                TRIM(split_product_type.value::string, ' ') as product_type,
                 MAX(c.id) AS id
             FROM product_catalog c
             JOIN config_dataset_data_expiration e
-                ON c.dataset_id = e.dataset_id
+                ON c.dataset_id = e.dataset_id,
+                LATERAL FLATTEN(input=>split(c.product_type, ',')) split_product_type
             WHERE c.dataset_id = :catalog_id
                 AND c.retailer_id = :retailer_id
                 AND c.update_time >= e.cutoff_time
-                {filter_query}
-            GROUP BY 1, 2, 3
+            GROUP BY 1, 2, 3, 4
         )
+        {filter_query}
     )
     WHERE ordinal <= 50
 ),

@@ -1,4 +1,4 @@
-from sqlalchemy import and_, literal_column, not_, or_, text
+from sqlalchemy import and_, literal_column, not_, or_, text, column
 
 
 # Assumptions:
@@ -139,5 +139,5 @@ def convert(expression):
 
 def get_query_and_variables(expression):
     filter_variables = get_product_type_variables(expression)
-    filter_query = text('AND ({})'.format(convert(expression))) if len(filter_variables.keys()) else ''
+    filter_query = text('WHERE {}'.format(convert(expression))) if len(filter_variables.keys()) else ''
     return filter_variables, filter_query
