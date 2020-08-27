@@ -1,4 +1,4 @@
-from sqlalchemy import and_, literal_column, not_, or_, text, column
+from sqlalchemy import and_, literal_column, not_, or_, text
 
 
 # Assumptions:
