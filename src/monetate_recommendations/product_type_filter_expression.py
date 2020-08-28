@@ -65,12 +65,11 @@ def startswith_expression(expression):
     field = expression["left"]["field"]
     value = expression["right"]["value"]
 
-
     like_statements = []
     for i in value:
         if i is not None:
             like_statements.append(literal_column(field).startswith(i))
-            like_statements.append(literal_column(field).contains(i))
+            like_statements.append(literal_column(field).contains(',' + i))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
