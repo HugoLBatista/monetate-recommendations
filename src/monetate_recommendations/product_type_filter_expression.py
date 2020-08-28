@@ -41,8 +41,8 @@ def startswith_expression(expression):
     can be rendered as an SQL clause
     product_type_1 = 'Apparel > Jeans'
     product_type_2 = ',Apparel > Jeans'
-    product_type_3 = 'Apparel > Jeans'
-    product_type_4 = ',Apparel > Jeans
+    product_type_3 = 'Halloween > Texas'
+    product_type_4 = ',Halloween > Texas
     ```sql
     (product_type LIKE :product_type_1 || '%%')
     OR
