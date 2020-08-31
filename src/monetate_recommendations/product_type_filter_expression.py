@@ -131,7 +131,7 @@ def get_product_type_variables(expression):
     -->
     {
         "product_type_1": "Apparel > Jeans",
-        "product_type_1": ",Apparel > Jeans",
+        "product_type_2": ",Apparel > Jeans",
         "product_type_3": "Halloween > Texas"
         "product_type_4": ",Halloween > Texas"
     }
