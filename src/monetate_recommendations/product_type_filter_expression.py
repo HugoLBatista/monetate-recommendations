@@ -21,6 +21,8 @@ def boolean(expression):
 
 def startswith_expression(expression):
     """Convert `startswith` type `filter_json` expressions to SQLAlchemy `BooleanClauseList`.
+    NB:
+    The query effectively matches COMPARISON_OPERATIONS_STRING_TO_LIST['startswith'] in filter_json.json_expression
 
     So, the `filter_json` expression
     ```
@@ -37,11 +39,18 @@ def startswith_expression(expression):
         }
     ```
     can be rendered as an SQL clause
-
+    product_type_1 = 'Apparel > Jeans'
+    product_type_2 = ',Apparel > Jeans'
+    product_type_3 = 'Halloween > Texas'
+    product_type_4 = ',Halloween > Texas
     ```sql
     (product_type LIKE :product_type_1 || '%%')
     OR
-    (product_type LIKE :product_type_2 || '%%')
+    (product_type LIKE '%%' || :product_type_2 || '%%')
+    OR
+    (product_type LIKE :product_type_3 || '%%')
+    OR
+    (product_type LIKE '%%' || :product_type_4 || '%%')
     ```
 
     with values provided using bound parameters `["Apparel > Jeans", "Apparel > Jeans"]`.
@@ -56,11 +65,13 @@ def startswith_expression(expression):
     field = expression["left"]["field"]
     value = expression["right"]["value"]
 
-    like_statements = [literal_column(field).startswith(i) for i in value if i is not None]
+    like_statements = []
+    for i in value:
+        if i is not None:
+            like_statements.append(literal_column(field).startswith(i))
+            like_statements.append(literal_column(field).contains(',' + i))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
-    elif len(like_statements) == 1:
-        return like_statements[0]  # Single statement, no need to OR
     # Multiple statements must be OR'ed together.
     return or_(*like_statements)
 
@@ -82,7 +93,11 @@ def not_startswith_expression(expression):
     NOT (
         (product_type LIKE :product_type_1 || '%%')
         OR
-        (product_type LIKE :product_type_2 || '%%')
+        (product_type LIKE '%%' || :product_type_2 || '%%')
+        OR
+        (product_type LIKE :product_type_3 || '%%')
+        OR
+        (product_type LIKE '%%' || :product_type_4 || '%%')
     )
 
     Single-value comparisons are converted to a "NOT LIKE" instead of being wrapped.
@@ -116,7 +131,9 @@ def get_product_type_variables(expression):
     -->
     {
         "product_type_1": "Apparel > Jeans",
-        "product_type_2": "Halloween > Texas"
+        "product_type_2": ",Apparel > Jeans",
+        "product_type_3": "Halloween > Texas"
+        "product_type_4": ",Halloween > Texas"
     }
     """
     filters = expression.get("filters")
@@ -125,7 +142,9 @@ def get_product_type_variables(expression):
         for f in filters:
             if f["left"]["field"] == "product_type":
                 for value in f["right"]["value"]:
+                    # Each product_type gets two LIKE statements, the second matches when startswith ','
                     product_types.append(value)
+                    product_types.append(',' + value)
     variables = {}
     for i, product_type in enumerate(product_types):
         variables["product_type_{}".format(i + 1)] = product_type
@@ -139,5 +158,5 @@ def convert(expression):
 
 def get_query_and_variables(expression):
     filter_variables = get_product_type_variables(expression)
-    filter_query = text('AND ({})'.format(convert(expression))) if len(filter_variables.keys()) else ''
+    filter_query = text('WHERE {}'.format(convert(expression))) if len(filter_variables.keys()) else ''
     return filter_variables, filter_query

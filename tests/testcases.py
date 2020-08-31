@@ -62,15 +62,15 @@ class RecsTestCase(SnowflakeTestCase):
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00001', 'test', 'http://monetate.com/SKU-00001.jpg',
              'TP-00001', 'http://monetate.com/1', 9.99, 'Clothing > Pants', 'Jean Pants', update_time),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00002', 'test', 'http://monetate.com/SKU-00002.jpg',
-             'TP-00002', 'http://monetate.com/2', 9.99, 'Clothing > Pants', 'Jean Pants', update_time),
+             'TP-00002', 'http://monetate.com/2', 9.99, 'Clothing > Pants, test', 'Jean Pants', update_time),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00003', 'test', 'http://monetate.com/SKU-00003.jpg',
              'TP-00003', 'http://monetate.com/3', 9.99, 'Clothing > Pants', 'Jean Pants', update_time),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00004', 'test', 'http://monetate.com/SKU-00004.jpg',
-             'TP-00004', 'http://monetate.com/4', 9.99, 'Clothing > Jeans', 'Jean Pants', update_time),
+             'TP-00004', 'http://monetate.com/4', 9.99, 'test ,    Clothing > Jeans', 'Jean Pants', update_time),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00005', 'test', 'http://monetate.com/SKU-00005.jpg',
              'TP-00005', 'http://monetate.com/5', 9.99, 'Clothing > Jeans', 'Jean Pants', update_time),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00006', 'test', 'http://monetate.com/SKU-00006.jpg',
-             'TP-00005', 'http://monetate.com/5', 9.99, 'Clothing > Jeans', 'Jean Pants', update_time),
+             'TP-00005', 'http://monetate.com/5', 9.99, 'test,Clothing > Jeans', 'Jean Pants', update_time),
         )
         cutoff_time = now - timedelta(minutes=10)
         cls.conn.execute(
