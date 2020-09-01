@@ -8,6 +8,7 @@ import bisect
 from sqlalchemy.sql import text
 from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate.common.sqlalchemy_session import CLUSTER_MAX
+import monetate.retailer.models as retailer_models
 import monetate.dio.models as dio_models
 from monetate_recommendations import product_type_filter_expression
 
@@ -169,6 +170,12 @@ def get_shard_range(shard_key):
     return shard_boundaries[hi_idx - 1], shard_boundaries[hi_idx]
 
 
+def get_retailer_strategy_accounts(retailer_id):
+    accounts = retailer_models.Account.objects.filter(retailer_id=retailer_id, archived=False)
+    return [account.id for account in accounts if len(dio_models.DefaultAccountCatalog.objects.filter(
+        account=account.id))]
+
+
 def create_unload_target_path(account_id, recset_id):
     stage = getattr(settings, 'SNOWFLAKE_DATAIO_STAGE', '@dataio_stage_v1')
     shard_key = get_shard_key(account_id)
@@ -211,28 +218,30 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         "shard_key": 847799
     }
     """
-    product_type_filter = parse_product_type_filter(recset.filter_json)
-    filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
-        product_type_filter)
-    catalog_id = recset.product_catalog.id if recset.product_catalog else \
-        dio_models.DefaultAccountCatalog.objects.get(account=recset.account.id).schema.id
-    filter_hash = get_filter_hash(recset.filter_json)
-    create_metric_table(conn, recset.account.id, recset.lookback_days,
-                        text(metric_table_query.format(algorithm=recset.algorithm,
-                                                       account_id=recset.account.id,
-                                                       lookback=recset.lookback_days)))
-    unload_path, send_time = create_unload_target_path(recset.account.id, recset.id)
-    product_rank_query = SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID.format(algorithm=recset.algorithm,
-                                                                   account_id=recset.account.id,
-                                                                   lookback=recset.lookback_days,
-                                                                   filter_query=filter_query)
-    conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query)),
-                 shard_key=get_shard_key(recset.account.id),
-                 account_id=recset.account.id,
-                 retailer_id=recset.retailer.id,
-                 recset_id=recset.id,
-                 sent_time=send_time,
-                 target=unload_path,
-                 filter_hash=filter_hash,
-                 catalog_id=catalog_id,
-                 **filter_variables)
+    account_ids = [recset.account.id] if recset.account else get_retailer_strategy_accounts(recset.retailer.id)
+    for account_id in account_ids:
+        product_type_filter = parse_product_type_filter(recset.filter_json)
+        filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
+            product_type_filter)
+        catalog_id = recset.product_catalog.id if recset.product_catalog else \
+            dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+        filter_hash = get_filter_hash(recset.filter_json)
+        create_metric_table(conn, account_id, recset.lookback_days,
+                            text(metric_table_query.format(algorithm=recset.algorithm,
+                                                           account_id=account_id,
+                                                           lookback=recset.lookback_days)))
+        unload_path, send_time = create_unload_target_path(account_id, recset.id)
+        product_rank_query = SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID.format(algorithm=recset.algorithm,
+                                                                       account_id=account_id,
+                                                                       lookback=recset.lookback_days,
+                                                                       filter_query=filter_query)
+        conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query)),
+                     shard_key=get_shard_key(account_id),
+                     account_id=account_id,
+                     retailer_id=recset.retailer.id,
+                     recset_id=recset.id,
+                     sent_time=send_time,
+                     target=unload_path,
+                     filter_hash=filter_hash,
+                     catalog_id=catalog_id,
+                     **filter_variables)
