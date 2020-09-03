@@ -135,6 +135,68 @@ class PurchaseCountTestCase(RecsTestCase):
             ('SKU-00004', 5),
         ])
 
+
+    def test_purchase_with_country_geo_30_days(self):
+        # 30-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  3                   2                   4
+        # TP-00002  3                   0                   2
+        # TP-00003  0                   0                   3
+        # TP-00004  0                   0                   1
+        #
+        # TP-00005(SKU-00005/SKU-00006): 9
+        # TP-00002(SKU-00002): 5
+        # TP-00003(SKU-00003): 3
+        # TP-00004(SKU-00004): 1
+        filter_json = json.dumps({"type": "and", "filters": []})
+        filter_hash = precompute_utils.get_filter_hash(filter_json)
+        self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result_arr=[
+            [
+                ('SKU-00005', 1, "CA"),
+                ('SKU-00006', 2, "CA"),
+                ('SKU-00003', 3, "CA"),
+                ('SKU-00002', 4, "CA"),
+                ('SKU-00004', 5, "CA"),
+            ], [
+                ('SKU-00005', 1, "US"),
+                ('SKU-00006', 2, "US"),
+                ('SKU-00002', 3, "US"),
+            ]
+        ], geo_target="country")
+
+
+    def test_purchase_with_region_geo_30_days(self):
+        # 30-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  3                   2                   4
+        # TP-00002  3                   0                   2
+        # TP-00003  0                   0                   3
+        # TP-00004  0                   0                   1
+        #
+        # TP-00005(SKU-00005/SKU-00006): 9
+        # TP-00002(SKU-00002): 5
+        # TP-00003(SKU-00003): 3
+        # TP-00004(SKU-00004): 1
+        filter_json = json.dumps({"type": "and", "filters": []})
+        filter_hash = precompute_utils.get_filter_hash(filter_json)
+        self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result_arr=[
+            [
+                ('SKU-00005', 1, "CA", "ON"),
+                ('SKU-00006', 2, "CA", "ON"),
+                ('SKU-00003', 3, "CA", "ON"),
+                ('SKU-00002', 4, "CA", "ON"),
+                ('SKU-00004', 5, "CA", "ON"),
+            ], [
+                ('SKU-00005', 1, "US", "NJ"),
+                ('SKU-00006', 2, "US", "NJ"),
+            ], [
+                ('SKU-00002', 1, "US", "PA"),
+                ('SKU-00005', 2, "US", "PA"),
+                ('SKU-00006', 3, "US", "PA"),
+            ]
+        ], geo_target="region")
+
+
     def test_purchase_filter(self):
         # 7-day totals:
         # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON

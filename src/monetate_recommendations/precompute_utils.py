@@ -11,6 +11,7 @@ from monetate.common.sqlalchemy_session import CLUSTER_MAX
 import monetate.retailer.models as retailer_models
 import monetate.dio.models as dio_models
 from monetate_recommendations import product_type_filter_expression
+from monetate_recommendations import constants
 
 DATA_JURISDICTION = 'recs_global'
 SESSION_SHARDS = 8
@@ -25,11 +26,10 @@ FROM (
     SELECT object_construct(
         'shard_key', :shard_key,
         'document', object_construct(
-            'pushdown_filter_hash', :filter_hash,
+            'pushdown_filter_hash', sha1(CONCAT('filter_json=', :filter_json {geo_hash_sql})),
             'data', (
-                SELECT array_agg(object_construct(*)) 
-                WITHIN GROUP (ORDER BY RANK ASC) 
-                FROM ranked_records
+                array_agg(object_construct(*))
+                WITHIN GROUP (ORDER BY RANK ASC)
             )
         ),
         'sent_time', :sent_time,
@@ -41,6 +41,8 @@ FROM (
             'id', :recset_id
         )
     )
+    FROM ranked_records
+    {geo_group_by}
 )
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
@@ -55,8 +57,10 @@ pid_algo AS (
     SELECT
         product_id,
         SUM(subtotal) AS score
+        {geo_columns}
     FROM scratch.{algorithm}_{account_id}_{lookback}
     GROUP BY product_id
+    {geo_columns}
 ),
 reduced_catalog AS (
     /*
@@ -97,6 +101,7 @@ sku_algo AS (
     SELECT
         c.id,
         pid_algo.score
+        {geo_columns}
     FROM pid_algo
     JOIN reduced_catalog c
     ON c.item_group_id = pid_algo.product_id
@@ -106,15 +111,18 @@ ranked_ids AS (
     SELECT
         id,
         ordinal
+        {geo_columns}
     FROM (
         SELECT
             id,
-            ROW_NUMBER() OVER (ORDER BY score DESC, id) AS ordinal
+            ROW_NUMBER() OVER ({geo_partition} ORDER BY score DESC, id) AS ordinal
+            {geo_columns}
         FROM sku_algo
     )
     WHERE ordinal <= 1000
 )
 SELECT pc.*, ri.ordinal AS rank
+  {geo_columns}
 FROM product_catalog as pc
 JOIN ranked_ids as ri
     ON pc.id = ri.id
@@ -176,6 +184,29 @@ def get_retailer_strategy_accounts(retailer_id):
         account=account.id))]
 
 
+def get_geo_sql(geo_target):
+    """
+    gets the SQL snippets for geo partitioning of precompute non-contextual models. if a geo_target is not specified,
+     then all snippets will simply be an empty string.
+     example return:
+    {
+        'geo_columns': ",country_code,region",
+        'geo_group_by': "GROUP BY country_code,region",
+        'geo_partition': "PARTITION BY country_code,region",
+        'geo_hash_sql': ",'/country_code=',IFNULL(country_code,''),'/region=',IFNULL(region,'')"
+    }
+    geo_hash_sql becomes one part of the push-down filter hash. each part of the filter is separated by a '/', which is
+    the reason for the prepended slash before country_code and region.
+    """
+    geo_cols = constants.GEO_TARGET_COLUMNS.get(geo_target, None)
+    return {
+        'geo_columns': "," + ",".join(geo_cols) if geo_cols else "",
+        'geo_group_by': "GROUP BY " + ",".join(geo_cols) if geo_cols else "",
+        'geo_partition': "PARTITION BY " + ",".join(geo_cols) if geo_cols else "",
+        'geo_hash_sql': "".join([",'/{}=',IFNULL({},'')".format(col, col) for col in geo_cols]) if geo_cols else ""
+    }
+
+
 def create_unload_target_path(account_id, recset_id):
     stage = getattr(settings, 'SNOWFLAKE_DATAIO_STAGE', '@dataio_stage_v1')
     shard_key = get_shard_key(account_id)
@@ -225,23 +256,24 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
             product_type_filter)
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
-        filter_hash = get_filter_hash(recset.filter_json)
         create_metric_table(conn, account_id, recset.lookback_days,
                             text(metric_table_query.format(algorithm=recset.algorithm,
                                                            account_id=account_id,
                                                            lookback=recset.lookback_days)))
         unload_path, send_time = create_unload_target_path(account_id, recset.id)
+        geo_sql = get_geo_sql(recset.geo_target)
         product_rank_query = SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID.format(algorithm=recset.algorithm,
                                                                        account_id=account_id,
                                                                        lookback=recset.lookback_days,
-                                                                       filter_query=filter_query)
-        conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query)),
+                                                                       filter_query=filter_query,
+                                                                       **geo_sql)
+        conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query, **geo_sql)),
                      shard_key=get_shard_key(account_id),
                      account_id=account_id,
                      retailer_id=recset.retailer.id,
                      recset_id=recset.id,
                      sent_time=send_time,
                      target=unload_path,
-                     filter_hash=filter_hash,
+                     filter_json=recset.filter_json,
                      catalog_id=catalog_id,
                      **filter_variables)
