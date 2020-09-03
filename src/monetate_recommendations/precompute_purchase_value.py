@@ -44,6 +44,7 @@ JOIN purchase_line_value f
     AND f.mid_rnd = s.mid_rnd
 WHERE s.start_time >= :begin_session_time
     AND s.start_time < :end_session_time
+    AND s.account_id = :account_id
 GROUP BY 1, 2, 3, 4;
 """
 
