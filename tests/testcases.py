@@ -83,7 +83,7 @@ class RecsTestCase(SnowflakeTestCase):
             (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30))
         )
 
-    def _run_recs_test(self, algorithm, lookback, filter_json, expected_result):
+    def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None, geo_target="none"):
         # Insert row into config to mock out a lookback setting
         recs_models.AccountRecommendationSetting.objects.create(
             account=self.account,
@@ -99,7 +99,7 @@ class RecsTestCase(SnowflakeTestCase):
                 filter_json=filter_json,
                 retailer=self.account.retailer,
                 base_recommendation_on="none",
-                geo_target="none",
+                geo_target=geo_target,
                 name="test",
                 order="algorithm",
                 version=1,
@@ -118,14 +118,29 @@ class RecsTestCase(SnowflakeTestCase):
             mock_suffix.return_value = unload_path, sent_time
             FUNC_MAP[algorithm]([recset])
 
-        actual_result = json.loads([line.strip() for line in s3_filereader2.read_s3_gz(s3_url)][0])
-        # equal number product records vs expected
-        self.assertEqual(len(actual_result['document']['data']), len(expected_result))
-        self.assertEqual(actual_result['account']['id'], recset.account.id)
-        self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
-        self.assertEqual(actual_result['schema']['id'], recset.id)
+        # for backwards compatibility, need to support expected_result being array of tuple rather than arr(arr(tuple))
+        def order_by_geo(results):
+            data = results['document']['data'][0]
+            return str(data.get('COUNTRY_CODE', None)) + "," + str(data.get('REGION', None))
 
-        # records match expected
-        for i, item in enumerate(expected_result):
-            self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
-            self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])
+        expected_results = expected_result_arr or [expected_result]
+
+        actual_results = sorted([json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)], key=order_by_geo)
+        self.assertEqual(len(actual_results), len(expected_results))
+        for result_line in range(0, len(actual_results)):
+            expected_result = expected_results[result_line]
+            actual_result = actual_results[result_line]
+            # equal number product records vs expected
+            self.assertEqual(len(actual_result['document']['data']), len(expected_result))
+            self.assertEqual(actual_result['account']['id'], recset.account.id)
+            self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
+            self.assertEqual(actual_result['schema']['id'], recset.id)
+
+            # records match expected
+            for i, item in enumerate(expected_result):
+                self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
+                self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])
+                if len(item) > 2:
+                    self.assertEqual(item[2], actual_result['document']['data'][i]['COUNTRY_CODE'])
+                if len(item) > 3:
+                    self.assertEqual(item[3], actual_result['document']['data'][i]['REGION'])

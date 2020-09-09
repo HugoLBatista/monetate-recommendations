@@ -23,3 +23,8 @@ COMPLETED_CHOICES = (
 )
 
 TEXT_FIELD_MAX_LEN = 2**20
+
+GEO_TARGET_COLUMNS = {
+    'country': ["country_code"],
+    'region': ["country_code", "region"]
+}
