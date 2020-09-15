@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 import json
+import hashlib
 
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
-from monetate_recommendations import precompute_utils
 from .testcases import RecsTestCase
 
 
@@ -145,7 +145,6 @@ class MostViewedTestCase(RecsTestCase):
         # TP-00005(SKU-00005/SKU-00006): 5
         # TP-00003(SKU-00003): 3
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="view", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00002', 1),
             ('SKU-00005', 2),
@@ -166,7 +165,6 @@ class MostViewedTestCase(RecsTestCase):
         # TP-00005(SKU-00005/SKU-00006): 5
         # TP-00004(SKU-00004): 2
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="view", lookback=30, filter_json=filter_json, expected_result=[
             ('SKU-00002', 1),
             ('SKU-00003', 2),
@@ -199,7 +197,6 @@ class MostViewedTestCase(RecsTestCase):
                 "value": ["Clothing > Jeans"]
             }
         }]})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="view", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
@@ -229,10 +226,57 @@ class MostViewedTestCase(RecsTestCase):
                 "value": ["Clothing > Jeans", "Clothing > Pants"]
             }
         }]})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="view", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00002', 1),
             ('SKU-00005', 2),
             ('SKU-00006', 3),
             ('SKU-00003', 4),
+        ])
+
+    def test_view_filter_dynamic(self):
+        # 30-day totals:
+        #
+        # TP-00002(SKU-00002): 9, product_type: "Clothing > Pants, test"
+        # TP-00003(SKU-00003): 6, product_type: "Clothing > Pants"
+        # TP-00005(SKU-00005): 5, product_type: "Clothing > Jeans"
+        # TP-00005(SKU-00006): 5, product_type: "test,Clothing > Jeans"
+        # TP-00004(SKU-00004): 2, product_type: "test ,    Clothing > Jeans"
+        filter_json = json.dumps({
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "function",
+                    "value": "any_item_in_cart"
+                }
+            }]
+        })
+        self._run_recs_test(algorithm="view", lookback=30, filter_json=filter_json, expected_result_arr=[
+            [  # product_type=""
+                ('SKU-00002', 1),
+                ('SKU-00003', 2),
+                ('SKU-00005', 3),
+                ('SKU-00006', 4),
+                ('SKU-00004', 5),
+            ], [  # product_type="Clothing > Jeans"
+                ('SKU-00005', 1),
+                ('SKU-00006', 2),
+                ('SKU-00004', 3),
+            ], [  # product_type="Clothing > Pants"
+                ('SKU-00002', 1),
+                ('SKU-00003', 2),
+            ], [  # product_type="test"
+                ('SKU-00002', 1),
+                ('SKU-00006', 2),
+                ('SKU-00004', 3),
+            ]
+        ], pushdown_filter_hashes=[
+            hashlib.sha1('product_type='.lower()).hexdigest(),
+            hashlib.sha1('product_type=Clothing > Jeans'.lower()).hexdigest(),
+            hashlib.sha1('product_type=Clothing > Pants'.lower()).hexdigest(),
+            hashlib.sha1('product_type=test'.lower()).hexdigest(),
         ])

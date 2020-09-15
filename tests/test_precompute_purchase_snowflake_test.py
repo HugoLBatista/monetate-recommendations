@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 import json
+import hashlib
 
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
-from monetate_recommendations import precompute_utils
 from .testcases import RecsTestCase
 
 
@@ -105,7 +105,6 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00002(SKU-00002): 5
         # TP-00003(SKU-00003): 3
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
@@ -126,7 +125,6 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00003(SKU-00003): 3
         # TP-00004(SKU-00004): 1
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
@@ -134,7 +132,6 @@ class PurchaseCountTestCase(RecsTestCase):
             ('SKU-00003', 4),
             ('SKU-00004', 5),
         ])
-
 
     def test_purchase_with_country_geo_30_days(self):
         # 30-day totals:
@@ -149,7 +146,6 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00003(SKU-00003): 3
         # TP-00004(SKU-00004): 1
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result_arr=[
             [
                 ('SKU-00005', 1, "CA"),
@@ -162,8 +158,10 @@ class PurchaseCountTestCase(RecsTestCase):
                 ('SKU-00006', 2, "US"),
                 ('SKU-00002', 3, "US"),
             ]
-        ], geo_target="country")
-
+        ], geo_target="country", pushdown_filter_hashes=[
+            hashlib.sha1('product_type=/country_code=CA'.lower()).hexdigest(),
+            hashlib.sha1('product_type=/country_code=US'.lower()).hexdigest(),
+        ])
 
     def test_purchase_with_region_geo_30_days(self):
         # 30-day totals:
@@ -178,7 +176,6 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00003(SKU-00003): 3
         # TP-00004(SKU-00004): 1
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result_arr=[
             [
                 ('SKU-00005', 1, "CA", "ON"),
@@ -194,8 +191,11 @@ class PurchaseCountTestCase(RecsTestCase):
                 ('SKU-00005', 2, "US", "PA"),
                 ('SKU-00006', 3, "US", "PA"),
             ]
-        ], geo_target="region")
-
+        ], geo_target="region", pushdown_filter_hashes=[
+            hashlib.sha1('product_type=/country_code=CA/region=ON'.lower()).hexdigest(),
+            hashlib.sha1('product_type=/country_code=US/region=NJ'.lower()).hexdigest(),
+            hashlib.sha1('product_type=/country_code=US/region=PA'.lower()).hexdigest(),
+        ])
 
     def test_purchase_filter(self):
         # 7-day totals:
@@ -220,7 +220,6 @@ class PurchaseCountTestCase(RecsTestCase):
                 "value": ["Clothing > Jeans"]
             }
         }]})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
@@ -249,7 +248,6 @@ class PurchaseCountTestCase(RecsTestCase):
                 "value": ["Clothing > Jeans", "Clothing > Pants"]
             }
         }]})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
