@@ -45,8 +45,8 @@ FROM (
         )
     )
     FROM ranked_records
+    WHERE rank <= 1000
     {group_by}
-    LIMIT 1000
 )
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
