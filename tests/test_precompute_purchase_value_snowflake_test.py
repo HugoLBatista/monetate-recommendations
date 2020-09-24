@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 import json
+import hashlib
 
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
-from monetate_recommendations import precompute_utils
 from .testcases import RecsTestCase
 
 
@@ -114,7 +114,6 @@ class PurchaseValueTestCase(RecsTestCase):
         #   TP-00005(SKU-00005/SKU-00006): $10
         #   TP-00003(SKU-00003): $9
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00002', 1),
             ('SKU-00005', 2),
@@ -135,7 +134,6 @@ class PurchaseValueTestCase(RecsTestCase):
         #   TP-00003(SKU-00003): $9
         #   TP-00004(SKU-00004): $4
         filter_json = json.dumps({"type": "and", "filters": []})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=30, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
@@ -168,7 +166,6 @@ class PurchaseValueTestCase(RecsTestCase):
                 "value": ["Clothing > Jeans"]
             }
         }]})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
@@ -198,10 +195,84 @@ class PurchaseValueTestCase(RecsTestCase):
                 "value": ["Clothing > Jeans", "Clothing > Pants"]
             }
         }]})
-        filter_hash = precompute_utils.get_filter_hash(filter_json)
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00002', 1),
             ('SKU-00005', 2),
             ('SKU-00006', 3),
             ('SKU-00003', 4),
+        ])
+
+    def test_purchase_value_with_region_geo_dynamic_filter(self):
+        # 7-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  2 * $2   (4)        2 * $2 (4)          1 * $2 (2)
+        # TP-00002  3 * $3   (9)        0 * $x (0)          2 * $3 (6)
+        # TP-00003  0 * $x   (0)        0 * $x (0)          3 * $3 (9)
+        #
+        #   TP-00002(SKU-00002): $15, product_type: "Clothing > Pants, test"
+        #   TP-00005(SKU-00005): $10, product_type: "Clothing > Jeans"
+        #   TP-00005(SKU-00006): $10, product_type: "test,Clothing > Jeans"
+        #   TP-00003(SKU-00003): $9, product_type: "Clothing > Pants"
+        filter_json = json.dumps({
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "function",
+                    "value": "any_item_in_cart"
+                }
+            }]
+        })
+        self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result_arr=[
+            [  # product_type=""
+                ('SKU-00003', 1, 'CA', 'ON'),
+                ('SKU-00002', 2, 'CA', 'ON'),
+                ('SKU-00005', 3, 'CA', 'ON'),
+                ('SKU-00006', 4, 'CA', 'ON'),
+            ], [  # product_type="Clothing > Jeans"
+                ('SKU-00005', 1, 'CA', 'ON'),
+                ('SKU-00006', 2, 'CA', 'ON'),
+            ], [  # product_type="Clothing > Pants"
+                ('SKU-00003', 1, 'CA', 'ON'),
+                ('SKU-00002', 2, 'CA', 'ON'),
+            ], [  # product_type="test"
+                ('SKU-00002', 1, 'CA', 'ON'),
+                ('SKU-00006', 2, 'CA', 'ON'),
+            ], [  # product_type=""
+                ('SKU-00005', 1, 'US', 'NJ'),
+                ('SKU-00006', 2, 'US', 'NJ'),
+            ], [  # product_type="Clothing > Jeans"
+                ('SKU-00005', 1, 'US', 'NJ'),
+                ('SKU-00006', 2, 'US', 'NJ'),
+            ], [  # product_type="test"
+                ('SKU-00006', 1, 'US', 'NJ'),
+            ], [  # product_type=""
+                ('SKU-00002', 1, 'US', 'PA'),
+                ('SKU-00005', 2, 'US', 'PA'),
+                ('SKU-00006', 3, 'US', 'PA'),
+            ], [  # product_type="Clothing > Jeans"
+                ('SKU-00005', 1, 'US', 'PA'),
+                ('SKU-00006', 2, 'US', 'PA'),
+            ], [  # product_type="Clothing > Pants"
+                ('SKU-00002', 1, 'US', 'PA'),
+            ], [  # product_type="test"
+                ('SKU-00002', 1, 'US', 'PA'),
+                ('SKU-00006', 2, 'US', 'PA'),
+            ]
+        ], geo_target="region", pushdown_filter_hashes=[
+            hashlib.sha1('product_type=/country_code=CA/region=ON'.lower()).hexdigest(),
+            hashlib.sha1('product_type=Clothing > Jeans/country_code=CA/region=ON'.lower()).hexdigest(),
+            hashlib.sha1('product_type=Clothing > Pants/country_code=CA/region=ON'.lower()).hexdigest(),
+            hashlib.sha1('product_type=test/country_code=CA/region=ON'.lower()).hexdigest(),
+            hashlib.sha1('product_type=/country_code=US/region=NJ'.lower()).hexdigest(),
+            hashlib.sha1('product_type=Clothing > Jeans/country_code=US/region=NJ'.lower()).hexdigest(),
+            hashlib.sha1('product_type=test/country_code=US/region=NJ'.lower()).hexdigest(),
+            hashlib.sha1('product_type=/country_code=US/region=PA'.lower()).hexdigest(),
+            hashlib.sha1('product_type=Clothing > Jeans/country_code=US/region=PA'.lower()).hexdigest(),
+            hashlib.sha1('product_type=Clothing > Pants/country_code=US/region=PA'.lower()).hexdigest(),
+            hashlib.sha1('product_type=test/country_code=US/region=PA'.lower()).hexdigest(),
         ])

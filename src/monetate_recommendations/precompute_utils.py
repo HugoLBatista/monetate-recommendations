@@ -1,7 +1,6 @@
 from django.conf import settings
 import os
 import datetime
-import hashlib
 import json
 import binascii
 import bisect
@@ -16,20 +15,24 @@ from monetate_recommendations import constants
 DATA_JURISDICTION = 'recs_global'
 SESSION_SHARDS = 8
 
+
 SNOWFLAKE_UNLOAD = """
 COPY
 INTO :target
 FROM (
-    WITH ranked_records AS (
+    WITH filtered_scored_records AS (
         {query}
+    ),
+    ranked_records AS (
+        {rank_query}
     )
     SELECT object_construct(
         'shard_key', :shard_key,
         'document', object_construct(
-            'pushdown_filter_hash', sha1(CONCAT('filter_json=', :filter_json {geo_hash_sql})),
+            'pushdown_filter_hash', sha1(LOWER(CONCAT('product_type=', {dynamic_product_type} {geo_hash_sql}))),
             'data', (
                 array_agg(object_construct(*))
-                WITHIN GROUP (ORDER BY RANK ASC)
+                WITHIN GROUP (ORDER BY rank ASC)
             )
         ),
         'sent_time', :sent_time,
@@ -42,12 +45,30 @@ FROM (
         )
     )
     FROM ranked_records
-    {geo_group_by}
+    WHERE rank <= 1000
+    {group_by}
 )
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
 """
+
+
+DYNAMIC_FILTER_RANKS = """
+SELECT filtered_scored_records.*, 
+    TRIM(split_product_type.value::string, ' ') as split_product_type,
+    ROW_NUMBER() OVER ({partition_by} ORDER BY score DESC, id) as rank
+FROM filtered_scored_records,
+LATERAL FLATTEN(input=>ARRAY_APPEND(SPLIT(product_type, ','), '')) split_product_type
+"""
+
+
+STATIC_FILTER_RANKS = """
+SELECT filtered_scored_records.*,
+    ROW_NUMBER() OVER ({partition_by} ORDER BY score DESC, id) as rank
+FROM filtered_scored_records
+"""
+
 
 # SKU ranking query used by view, purchase, and purchase_value algorithms
 SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID = """
@@ -86,7 +107,7 @@ reduced_catalog AS (
             FROM product_catalog c
             JOIN config_dataset_data_expiration e
                 ON c.dataset_id = e.dataset_id,
-                LATERAL FLATTEN(input=>split(c.product_type, ',')) split_product_type
+            LATERAL FLATTEN(input=>split(c.product_type, ',')) split_product_type
             WHERE c.dataset_id = :catalog_id
                 AND c.retailer_id = :retailer_id
                 AND c.update_time >= e.cutoff_time
@@ -105,47 +126,33 @@ sku_algo AS (
     FROM pid_algo
     JOIN reduced_catalog c
     ON c.item_group_id = pid_algo.product_id
-),
-ranked_ids AS (
-    /* Convert scores into ordinals, limit to top 1000 per lookup key for later post filtering */
-    SELECT
-        id,
-        ordinal
-        {geo_columns}
-    FROM (
-        SELECT
-            id,
-            ROW_NUMBER() OVER ({geo_partition} ORDER BY score DESC, id) AS ordinal
-            {geo_columns}
-        FROM sku_algo
-    )
-    WHERE ordinal <= 1000
 )
-SELECT pc.*, ri.ordinal AS rank
+SELECT pc.*, sa.score
   {geo_columns}
 FROM product_catalog as pc
-JOIN ranked_ids as ri
-    ON pc.id = ri.id
+JOIN sku_algo as sa
+    ON pc.id = sa.id
 WHERE pc.retailer_id = :retailer_id
     AND pc.dataset_id = :catalog_id
 """
 
 
 def parse_product_type_filter(filter_json):
-    # TODO: In the future this will need to support dyanmic filters
     def _filter_product_type(f):
-        is_product_type = f['left']['field'] == 'product_type'
-        is_dynamic = f['right']['type'] == 'function'
-        return is_product_type and not is_dynamic
+        return f['left']['field'] == 'product_type'
+
+    def _filter_dynamic(f):
+        return f['right']['type'] != 'function'
 
     filter_dict = json.loads(filter_json)
-    filter_dict['filters'] = filter(_filter_product_type, filter_dict['filters'])
-    return filter_dict
+    product_type_filters = filter(_filter_product_type, filter_dict['filters'])
+    static_product_type_filters = filter(_filter_dynamic, product_type_filters)
 
+    filter_dict['filters'] = static_product_type_filters
+    has_dynamic_filter = filter_dict['type'] == 'and' and \
+                                      len(static_product_type_filters) != len(product_type_filters)
 
-def get_filter_hash(filter_json):
-    # TODO: In the future this will need to support dyanmic filters
-    return hashlib.sha1(filter_json).hexdigest()
+    return filter_dict, has_dynamic_filter
 
 
 def create_metric_table(conn, account_id, lookback, query):
@@ -184,26 +191,40 @@ def get_retailer_strategy_accounts(retailer_id):
         account=account.id))]
 
 
-def get_geo_sql(geo_target):
+def get_unload_sql(geo_target, has_dynamic_filter):
     """
-    gets the SQL snippets for geo partitioning of precompute non-contextual models. if a geo_target is not specified,
-     then all snippets will simply be an empty string.
+    gets the SQL snippets for geo partitioning of precompute non-contextual models as well as sql snippets for
+    dynamic product type filters. If a geo_target or dynamic filter is not specified, then all snippets will simply
+    be an empty string.
      example return:
     {
         'geo_columns': ",country_code,region",
-        'geo_group_by': "GROUP BY country_code,region",
-        'geo_partition': "PARTITION BY country_code,region",
-        'geo_hash_sql': ",'/country_code=',IFNULL(country_code,''),'/region=',IFNULL(region,'')"
+        'geo_hash_sql': ",'/country_code=',IFNULL(country_code,''),'/region=',IFNULL(region,'')",
+        'dynamic_product_type': "split_product_type",
+        'group_by': "GROUP BY country_code,region,split_product_type",
+        'rank_query': '''
+            SELECT filtered_scored_records.*,
+                TRIM(split_product_type.value::string, ' ') as split_product_type,
+                ROW_NUMBER() OVER (PARTITION BY country_code,region,split_product_type ORDER BY score DESC, id) as rank
+            FROM filtered_scored_records,
+            LATERAL FLATTEN(input=>ARRAY_APPEND(SPLIT(product_type, ','), '')) split_product_type
+        '''
     }
     geo_hash_sql becomes one part of the push-down filter hash. each part of the filter is separated by a '/', which is
     the reason for the prepended slash before country_code and region.
     """
     geo_cols = constants.GEO_TARGET_COLUMNS.get(geo_target, None)
+    geo_str = ",".join(geo_cols) if geo_cols else ""
+    dynamic_filter_delimiter = "," if geo_cols else ""
+    dynamic_filter_str = dynamic_filter_delimiter + "split_product_type" if has_dynamic_filter else ""
+    partition_by = "PARTITION BY " + geo_str + dynamic_filter_str if geo_cols or has_dynamic_filter else ""
+    rank_query = DYNAMIC_FILTER_RANKS if has_dynamic_filter else STATIC_FILTER_RANKS
     return {
         'geo_columns': "," + ",".join(geo_cols) if geo_cols else "",
-        'geo_group_by': "GROUP BY " + ",".join(geo_cols) if geo_cols else "",
-        'geo_partition': "PARTITION BY " + ",".join(geo_cols) if geo_cols else "",
-        'geo_hash_sql': "".join([",'/{}=',IFNULL({},'')".format(col, col) for col in geo_cols]) if geo_cols else ""
+        'geo_hash_sql': "".join([",'/{}=',IFNULL({},'')".format(col, col) for col in geo_cols]) if geo_cols else "",
+        'dynamic_product_type': "split_product_type" if has_dynamic_filter else "''",
+        'group_by': "GROUP BY " + geo_str + dynamic_filter_str if geo_cols or has_dynamic_filter else "",
+        'rank_query': rank_query.format(partition_by=partition_by)
     }
 
 
@@ -251,7 +272,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     """
     account_ids = [recset.account.id] if recset.account else get_retailer_strategy_accounts(recset.retailer.id)
     for account_id in account_ids:
-        product_type_filter = parse_product_type_filter(recset.filter_json)
+        product_type_filter, has_dynamic_filter = parse_product_type_filter(recset.filter_json)
         filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
             product_type_filter)
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
@@ -261,13 +282,13 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                                                            account_id=account_id,
                                                            lookback=recset.lookback_days)))
         unload_path, send_time = create_unload_target_path(account_id, recset.id)
-        geo_sql = get_geo_sql(recset.geo_target)
+        unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
         product_rank_query = SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID.format(algorithm=recset.algorithm,
                                                                        account_id=account_id,
                                                                        lookback=recset.lookback_days,
                                                                        filter_query=filter_query,
-                                                                       **geo_sql)
-        conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query, **geo_sql)),
+                                                                       **unload_sql)
+        conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query, **unload_sql)),
                      shard_key=get_shard_key(account_id),
                      account_id=account_id,
                      retailer_id=recset.retailer.id,

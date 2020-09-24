@@ -83,7 +83,8 @@ class RecsTestCase(SnowflakeTestCase):
             (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30))
         )
 
-    def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None, geo_target="none"):
+    def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
+                       geo_target="none", pushdown_filter_hashes=None):
         # Insert row into config to mock out a lookback setting
         recs_models.AccountRecommendationSetting.objects.create(
             account=self.account,
@@ -118,18 +119,16 @@ class RecsTestCase(SnowflakeTestCase):
             mock_suffix.return_value = unload_path, sent_time
             FUNC_MAP[algorithm]([recset])
 
-        # for backwards compatibility, need to support expected_result being array of tuple rather than arr(arr(tuple))
-        def order_by_geo(results):
-            data = results['document']['data'][0]
-            return str(data.get('COUNTRY_CODE', None)) + "," + str(data.get('REGION', None))
-
         expected_results = expected_result_arr or [expected_result]
 
-        actual_results = sorted([json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)], key=order_by_geo)
+        actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)]
         self.assertEqual(len(actual_results), len(expected_results))
-        for result_line in range(0, len(actual_results)):
+        for result_line in range(0, len(expected_results)):
             expected_result = expected_results[result_line]
-            actual_result = actual_results[result_line]
+            # lookup actual_result by pushdown_filter_hash if included otherwise assume results are in order
+            actual_result = [result for result in actual_results if
+                             result['document']['pushdown_filter_hash'] == pushdown_filter_hashes[result_line]][0] \
+                if pushdown_filter_hashes else actual_results[result_line]
             # equal number product records vs expected
             self.assertEqual(len(actual_result['document']['data']), len(expected_result))
             self.assertEqual(actual_result['account']['id'], recset.account.id)

@@ -1,11 +1,11 @@
 import json
-import datetime
 from monetate.test.testcases import TestCase
 from monetate_recommendations import precompute_utils
 
 
 class PrecomputeUtilsTestCase(TestCase):
     def test_parse_product_type_filter(self):
+        self.maxDiff = None
         filter_json = json.dumps({
             "type": "and",
             "filters": [{
@@ -30,7 +30,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        result = precompute_utils.parse_product_type_filter(filter_json)
+        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
         expected = {
             "type": "and",
             "filters": [{
@@ -46,18 +46,20 @@ class PrecomputeUtilsTestCase(TestCase):
             }]
         }
         self.assertEqual(result, expected)
+        self.assertFalse(has_dynamic)
 
     def test_parse_product_type_filter_empty(self):
         filter_json = json.dumps({
             "type": "and",
             "filters": []
         })
-        result = precompute_utils.parse_product_type_filter(filter_json)
+        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
         expected = {
             "type": "and",
             "filters": []
         }
         self.assertEqual(result, expected)
+        self.assertFalse(has_dynamic)
 
     def test_parse_product_type_filter_dynamic(self):
         filter_json = json.dumps({
@@ -76,12 +78,13 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        result = precompute_utils.parse_product_type_filter(filter_json)
+        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
         expected = {
             "type": "and",
             "filters": []
         }
         self.assertEqual(result, expected)
+        self.assertTrue(has_dynamic)
 
     def test_parse_product_type_filter_multiple(self):
         filter_json = json.dumps({
@@ -108,7 +111,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        result = precompute_utils.parse_product_type_filter(filter_json)
+        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
         expected = {
             "type": "or",
             "filters": [{
@@ -134,34 +137,7 @@ class PrecomputeUtilsTestCase(TestCase):
             }]
         }
         self.assertEqual(result, expected)
-
-    def test_get_filter_hash(self):
-        filter_json = json.dumps({
-            "type": "or",
-            "filters": [{
-                "type": "startswith",
-                "left": {
-                    "type": "field",
-                    "field": "product_type"
-                },
-                "right": {
-                    "type": "value",
-                    "value": ["Apparel > Jeans"]
-                }
-            }, {
-                "type": "startswith",
-                "left": {
-                    "type": "field",
-                    "field": "product_type"
-                },
-                "right": {
-                    "type": "value",
-                    "value": ["Halloween > Texas"]
-                }
-            }]
-        })
-        expected_result = '97c0b8e06199c2ec5a7a9e9c27665ece2d842c4a'
-        self.assertEqual(precompute_utils.get_filter_hash(filter_json), expected_result)
+        self.assertFalse(has_dynamic)
 
     def test_get_unload_target_path(self):
         account_id = 123
