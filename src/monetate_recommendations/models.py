@@ -11,7 +11,7 @@ class RecommendationsPrecompute(models.Model):
     class Meta(object):
         db_table = 'recs_recommendationprecompute'
 
-    recset_id = models.ForeignKey(RecommendationSet)
+    recset = models.ForeignKey(RecommendationSet)
     status = models.CharField(max_length=20, choices=constants.STATUS_CHOICES, default=constants.STATUS_PENDING)
     attempts = models.IntegerField(default=0)
     status_log = models.TextField(blank=True)
