@@ -51,6 +51,7 @@ FROM (
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
+VALIDATION_MODE='RETURN_ROWS'
 """
 
 
@@ -271,6 +272,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     }
     """
     account_ids = [recset.account.id] if recset.account else get_retailer_strategy_accounts(recset.retailer.id)
+    results = []
     for account_id in account_ids:
         product_type_filter, has_dynamic_filter = parse_product_type_filter(recset.filter_json)
         filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
@@ -288,13 +290,14 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                                                                        lookback=recset.lookback_days,
                                                                        filter_query=filter_query,
                                                                        **unload_sql)
-        conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query, **unload_sql)),
-                     shard_key=get_shard_key(account_id),
-                     account_id=account_id,
-                     retailer_id=recset.retailer.id,
-                     recset_id=recset.id,
-                     sent_time=send_time,
-                     target=unload_path,
-                     filter_json=recset.filter_json,
-                     catalog_id=catalog_id,
-                     **filter_variables)
+        results.append(conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query, **unload_sql)),
+                           shard_key=get_shard_key(account_id),
+                           account_id=account_id,
+                           retailer_id=recset.retailer.id,
+                           recset_id=recset.id,
+                           sent_time=send_time,
+                           target=unload_path,
+                           filter_json=recset.filter_json,
+                           catalog_id=catalog_id,
+                           **filter_variables))
+    return results

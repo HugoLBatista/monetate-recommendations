@@ -28,8 +28,10 @@ setup(
     classifiers=[],
     install_requires=[
         "Django>=1.11,<2.0",
-        "monetate-tenant<=0.3",
-        "monetate-recs==0.3",
+        "monetate-tenant>=0.5",
+        "monetate-recs==0.5",
+        "azure-storage-blob==2.1.0",
+        "snowflake-sqlalchemy==1.1.18",
     ],
     extras_require={
         "test": [

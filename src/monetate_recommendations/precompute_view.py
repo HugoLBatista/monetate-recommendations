@@ -31,11 +31,14 @@ GROUP BY 1, 2, 3;
 
 
 def precompute_view_algorithm(recsets):
+    results = []
     # Disable pooling so temp tables do not persist on connections returned to pool
     engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
     with job_timing.job_timer('precompute_view_algorithm'), contextlib.closing(engine.connect()) as warehouse_conn:
         for recset in recsets:
             if recset and recset.algorithm == 'view':
                 log.log_info('processing recset {}'.format(recset.id))
-                precompute_utils.process_noncollab_algorithm(warehouse_conn, recset, MOSTVIEWED_LOOKBACK)
+                results.append(precompute_utils.process_noncollab_algorithm(warehouse_conn, recset,
+                                                                            MOSTVIEWED_LOOKBACK))
     log.log_info('ending precompute_view_algorithm process')
+    return results
