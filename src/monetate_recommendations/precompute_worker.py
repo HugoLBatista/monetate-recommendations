@@ -250,14 +250,7 @@ class PrecomputeWorker(object):
         else:
             self.recommendation.status = constants.STATUS_COMPLETE
             self.recommendation.process_complete = True
-            self.count_results(thread.result)
+            self.log('products returned: {}'.format(thread.result))
+            self.recommendation.products_returned = sum(thread.result)
             if thread.message:
                 self.log(thread.message)
-
-    def count_results(self, result):
-        row_counts = []
-        for results_by_account in result:
-            for results_rows in results_by_account:
-                row_counts.append(len(json.loads(results_rows[0])['document']['data']))
-        self.log('products returned: {}'.format(row_counts))
-        self.recommendation.products_returned = sum(row_counts)

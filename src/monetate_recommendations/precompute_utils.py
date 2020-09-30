@@ -5,6 +5,7 @@ import json
 import binascii
 import bisect
 from sqlalchemy.sql import text
+from monetate.common.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate.common.sqlalchemy_session import CLUSTER_MAX
 import monetate.retailer.models as retailer_models
@@ -20,12 +21,6 @@ SNOWFLAKE_UNLOAD = """
 COPY
 INTO :target
 FROM (
-    WITH filtered_scored_records AS (
-        {query}
-    ),
-    ranked_records AS (
-        {rank_query}
-    )
     SELECT object_construct(
         'shard_key', :shard_key,
         'document', object_construct(
@@ -44,14 +39,12 @@ FROM (
             'id', :recset_id
         )
     )
-    FROM ranked_records
-    WHERE rank <= 1000
+    FROM scratch.recset_{account_id}_{recset_id}_ranks
     {group_by}
 )
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
-VALIDATION_MODE='RETURN_ROWS'
 """
 
 
@@ -70,9 +63,14 @@ SELECT filtered_scored_records.*,
 FROM filtered_scored_records
 """
 
+RESULT_COUNT = """
+SELECT COUNT(*) 
+FROM scratch.recset_{account_id}_{recset_id}_ranks
+"""
 
 # SKU ranking query used by view, purchase, and purchase_value algorithms
-SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID = """
+SKU_RANKS_BY_RECSET = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.recset_{account_id}_{recset_id}_ranks AS
 WITH
 pid_algo AS (
     /* Aggregates per product_id for an account at appropriate geo_rollup level */
@@ -127,14 +125,21 @@ sku_algo AS (
     FROM pid_algo
     JOIN reduced_catalog c
     ON c.item_group_id = pid_algo.product_id
+),
+filtered_scored_records AS (
+    SELECT pc.*, sa.score
+      {geo_columns}
+    FROM product_catalog as pc
+    JOIN sku_algo as sa
+        ON pc.id = sa.id
+    WHERE pc.retailer_id = :retailer_id
+        AND pc.dataset_id = :catalog_id
+), ranked_records AS (
+    {rank_query}
 )
-SELECT pc.*, sa.score
-  {geo_columns}
-FROM product_catalog as pc
-JOIN sku_algo as sa
-    ON pc.id = sa.id
-WHERE pc.retailer_id = :retailer_id
-    AND pc.dataset_id = :catalog_id
+SELECT *
+FROM ranked_records
+WHERE rank <= 1000
 """
 
 
@@ -285,19 +290,23 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                                                            lookback=recset.lookback_days)))
         unload_path, send_time = create_unload_target_path(account_id, recset.id)
         unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
-        product_rank_query = SKU_RANKS_BY_REGION_FOR_ACCOUNT_ID.format(algorithm=recset.algorithm,
-                                                                       account_id=account_id,
-                                                                       lookback=recset.lookback_days,
-                                                                       filter_query=filter_query,
-                                                                       **unload_sql)
-        results.append(conn.execute(text(SNOWFLAKE_UNLOAD.format(query=product_rank_query, **unload_sql)),
-                           shard_key=get_shard_key(account_id),
-                           account_id=account_id,
-                           retailer_id=recset.retailer.id,
-                           recset_id=recset.id,
-                           sent_time=send_time,
-                           target=unload_path,
-                           filter_json=recset.filter_json,
-                           catalog_id=catalog_id,
-                           **filter_variables))
+
+        conn.execute(text(SKU_RANKS_BY_RECSET.format(algorithm=recset.algorithm,
+                                                     recset_id=recset.id,
+                                                     account_id=account_id,
+                                                     lookback=recset.lookback_days,
+                                                     filter_query=filter_query,
+                                                     **unload_sql)),
+                     retailer_id=recset.retailer.id,
+                     catalog_id=catalog_id,
+                     **filter_variables)
+        results.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
+                                                                                    account_id=account_id,
+                                                                                    **unload_sql))), 0))
+        conn.execute(text(SNOWFLAKE_UNLOAD.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
+                     shard_key=get_shard_key(account_id),
+                     account_id=account_id,
+                     recset_id=recset.id,
+                     sent_time=send_time,
+                     target=unload_path)
     return results
