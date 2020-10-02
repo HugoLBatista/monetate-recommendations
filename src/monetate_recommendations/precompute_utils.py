@@ -278,7 +278,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     }
     """
     account_ids = [recset.account.id] if recset.account else get_retailer_strategy_accounts(recset.retailer.id)
-    results = []
+    result_counts = []
     for account_id in account_ids:
         product_type_filter, has_dynamic_filter = parse_product_type_filter(recset.filter_json)
         filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
@@ -301,13 +301,13 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                      retailer_id=recset.retailer.id,
                      catalog_id=catalog_id,
                      **filter_variables)
-        results.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
-                                                                                    account_id=account_id,
-                                                                                    **unload_sql))), 0))
+        result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
+                                                                                          account_id=account_id,
+                                                                                          **unload_sql))), 0))
         conn.execute(text(SNOWFLAKE_UNLOAD.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
                      shard_key=get_shard_key(account_id),
                      account_id=account_id,
                      recset_id=recset.id,
                      sent_time=send_time,
                      target=unload_path)
-    return results
+    return result_counts
