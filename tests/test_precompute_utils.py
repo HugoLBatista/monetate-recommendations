@@ -144,4 +144,4 @@ class PrecomputeUtilsTestCase(TestCase):
         recset_id = 456
         unload_path, send_time = precompute_utils.create_unload_target_path(account_id, recset_id)
         self.assertTrue('{:%Y%m%dT%H%M%S.000Z}'.format(send_time) in unload_path)
-        self.assertEqual(unload_path, '@test_db.public.test_reco_merch_stage_v1/recs_global/{t:%Y/%m/%d}/recs_global-{t:%Y%m%dT%H%M%S.000Z}_PT1M-524288-655360-precompute_456.json.gz'.format(t=send_time))
+        self.assertEqual(unload_path, '@test_db.public.test_reco_merch_stage_v1/recs_global/{t:%Y/%m/%d}/recs_global-{t:%Y%m%dT%H%M%S.000Z}_PT1M-524288-655360-precompute_123_456.json.gz'.format(t=send_time))

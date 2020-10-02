@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'monetate.idrec',
     'monetate.predicate',
     'monetate.reportv3',
+    'monetate.adlink',
     'monetate.dio',
     'monetate.recs',
     'monetate_recommendations',
