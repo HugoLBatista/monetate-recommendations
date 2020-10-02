@@ -15,6 +15,7 @@ Usage
 """
 
 import datetime
+import json
 import logging
 import os
 import time
@@ -26,6 +27,7 @@ from django.db.models import Q
 
 from .models import RecommendationsPrecompute
 from . import constants
+import precompute_algo_map as precompute_algo_map
 
 LOG = logging.getLogger('monetate_recommendations.precompute_worker')
 
@@ -55,6 +57,7 @@ class PrecomputeThread(threading.Thread):
         self.recommendation = recommendation
         self.result = None
         self.exception = None
+        self.message = None
         self.traceback = ""
         super(PrecomputeThread, self).__init__()
         self.daemon = True
@@ -62,12 +65,13 @@ class PrecomputeThread(threading.Thread):
 
     def run(self):
         try:
-            # TODO Implement (Run snowflake query)
-            #   with QuerySnowflakeRecs(self.recommendation) as self.connector:
-            #       self.result = self.connector.run_query() ...
-
-            # TODO Remove once logic implemented
-            time.sleep(2)
+            algorithm = self.recommendation.recset.algorithm
+            if algorithm in precompute_algo_map.FUNC_MAP.keys():
+                self.result = precompute_algo_map.FUNC_MAP[algorithm]([self.recommendation.recset])[0]
+            else:
+                self.message = 'invalid precompute algorithm {}'.format(algorithm)
+                self.recommendation.status = constants.STATUS_SKIPPED
+                self.recommendation.save()
         except Exception as e:
             self.exception = e
             self.traceback = traceback.format_exc()
@@ -82,7 +86,7 @@ class PrecomputeWorker(object):
     :param poll_interval: How many seconds the Worker should wait before looking for new recs.
     :param max_tries: How many times a worker should attempt to process a rec before marking as erred.
     :param heartbeat_interval: How often to heartbeat while doing work.
-    :param heartbeat_threshhold: How old a heartbeat needs to be before assuming its worker died.
+    :param heartbeat_threshold: How old a heartbeat needs to be before assuming its worker died.
     :param worker_max_time: Max time that a worker can run: it will exit upon completion of current job.
     """
 
@@ -100,9 +104,6 @@ class PrecomputeWorker(object):
         self.attempts = 0
 
     def log(self, msg, level=logging.INFO):
-        # TODO REMOVE
-        print(msg)
-        return
         if self.recommendation is not None:
             LOG.log(level, 'recommendations precompute {}: {}'.format(self.recommendation.id, msg))
             self.recommendation.append_to_status_log('{}: worker {}: {}\n'.format(timezone.now(), self.worker_id, msg))
@@ -141,8 +142,6 @@ class PrecomputeWorker(object):
         try:
             self.recommendation.attempts += 1
             self.recommendation.precompute_start_time = timezone.now()
-            # TODO Query RecommendationSet with recommendation.recset_id
-            #  and pass recset catalog, algo, lookback, product_type filters to worker.
             thread = self.run_work_thread()  # This thread does the actual work
             self.handle_thread_result(thread)
         finally:
@@ -251,5 +250,7 @@ class PrecomputeWorker(object):
         else:
             self.recommendation.status = constants.STATUS_COMPLETE
             self.recommendation.process_complete = True
-            self.recommendation.products_returned = len(thread.result or [])
-            self.log('{} products returned.'.format(self.recommendation.products_returned))
+            self.log('products returned: {}'.format(thread.result))
+            self.recommendation.products_returned = sum(thread.result)
+            if thread.message:
+                self.log(thread.message)
