@@ -7,6 +7,7 @@ from monetate.recs.models import RecommendationSet
 FUNC_MAP = {
     'view': precompute_view_algorithm,
     'purchase': precompute_purchase_algorithm,
+    'trending': precompute_purchase_algorithm,
     'purchase_value': precompute_purchase_value_algorithm,
 }
 
