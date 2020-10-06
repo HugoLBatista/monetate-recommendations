@@ -15,7 +15,6 @@ Usage
 """
 
 import datetime
-import json
 import logging
 import os
 import time
@@ -25,8 +24,8 @@ import traceback
 from django.utils import timezone
 from django.db.models import Q
 
-from .models import RecommendationsPrecompute
-from . import constants
+from monetate.recs.models import RecommendationsPrecompute
+import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map
 
 LOG = logging.getLogger('monetate_recommendations.precompute_worker')
@@ -70,7 +69,7 @@ class PrecomputeThread(threading.Thread):
                 self.result = precompute_algo_map.FUNC_MAP[algorithm]([self.recommendation.recset])[0]
             else:
                 self.message = 'invalid precompute algorithm {}'.format(algorithm)
-                self.recommendation.status = constants.STATUS_SKIPPED
+                self.recommendation.status = precompute_constants.STATUS_SKIPPED
                 self.recommendation.save()
         except Exception as e:
             self.exception = e
@@ -147,9 +146,9 @@ class PrecomputeWorker(object):
         finally:
             # Once we get here, file should no longer be in processing state
             # If it is, we messed something up
-            if self.recommendation.status == constants.STATUS_PROCESSING:
+            if self.recommendation.status == precompute_constants.STATUS_PROCESSING:
                 self.log('Unexpectedly still in processing', level=logging.ERROR)
-                self.recommendation.status = constants.STATUS_SYS_ERROR
+                self.recommendation.status = precompute_constants.STATUS_SYS_ERROR
             self.recommendation.precompute_end_time = timezone.now()
             self.recommendation.processing_time_seconds = int((self.recommendation.precompute_end_time - self.recommendation.precompute_start_time).total_seconds())
             self.log('Finished processing recommendation {} -- elapsed time {}'.format(self.recommendation.id, self.recommendation.processing_time_seconds))
@@ -168,9 +167,9 @@ class PrecomputeWorker(object):
         :return: Queryset
         """
         heartbeat_old_time = timezone.now() - datetime.timedelta(seconds=self.heartbeat_threshold)
-        recs_pending = Q(status=constants.STATUS_PENDING)
+        recs_pending = Q(status=precompute_constants.STATUS_PENDING)
         recs_retryable = ((Q(heartbeat_time__lt=heartbeat_old_time) | Q(heartbeat_time=None)) &
-                          Q(status__in=constants.RETRYABLE_STATES))
+                          Q(status__in=precompute_constants.RETRYABLE_STATES))
         return RecommendationsPrecompute.objects.filter(recs_pending | recs_retryable, attempts__lt=self.max_tries)
 
     def claim_recommendation(self, recs_qs):
@@ -194,7 +193,7 @@ class PrecomputeWorker(object):
         for rec in recs_qs.order_by('id')[:10]:
             this_rec_qs = RecommendationsPrecompute.objects.filter(id=rec.id, status=rec.status,
                                                                    heartbeat_time=rec.heartbeat_time)
-            rows_updated = this_rec_qs.update(status=constants.STATUS_PROCESSING, heartbeat_time=timezone.now())
+            rows_updated = this_rec_qs.update(status=precompute_constants.STATUS_PROCESSING, heartbeat_time=timezone.now())
             if rows_updated:
                 # I successfully claimed a rec
                 # NB: since update() does not call save() we need to re-query the rec from the DB
@@ -227,7 +226,7 @@ class PrecomputeWorker(object):
             # or run its cleanup tasks, so make sure we do them here.
             err_msg = 'Recommendation {} snowflake query timed out'.format(self.recommendation.id)
             self.log(err_msg)
-            self.recommendation.status = constants.STATUS_TIMEOUT_ERROR
+            self.recommendation.status = precompute_constants.STATUS_TIMEOUT_ERROR
             if thread.connector is not None:
                 thread.connector.cleanup()
             raise JobTimeoutError(err_msg)
@@ -244,11 +243,11 @@ class PrecomputeWorker(object):
     def handle_thread_result(self, thread):
         """Set status and log according to the results of the work"""
         if thread.exception is not None:
-            self.recommendation.status = constants.STATUS_SYS_ERROR
+            self.recommendation.status = precompute_constants.STATUS_SYS_ERROR
             self.log('Threw an error during processing: {}'.format(thread.traceback), level=logging.ERROR)
             raise thread.exception
         else:
-            self.recommendation.status = constants.STATUS_COMPLETE
+            self.recommendation.status = precompute_constants.STATUS_COMPLETE
             self.recommendation.process_complete = True
             self.log('products returned: {}'.format(thread.result))
             self.recommendation.products_returned = sum(thread.result)
