@@ -16,6 +16,10 @@ from monetate_recommendations import product_type_filter_expression
 DATA_JURISDICTION = 'recs_global'
 SESSION_SHARDS = 8
 
+GEO_TARGET_COLUMNS = {
+    'country': ["country_code"],
+    'region': ["country_code", "region"]
+}
 
 SNOWFLAKE_UNLOAD = """
 COPY
@@ -219,7 +223,7 @@ def get_unload_sql(geo_target, has_dynamic_filter):
     geo_hash_sql becomes one part of the push-down filter hash. each part of the filter is separated by a '/', which is
     the reason for the prepended slash before country_code and region.
     """
-    geo_cols = precompute_constants.GEO_TARGET_COLUMNS.get(geo_target, None)
+    geo_cols = GEO_TARGET_COLUMNS.get(geo_target, None)
     geo_str = ",".join(geo_cols) if geo_cols else ""
     dynamic_filter_delimiter = "," if geo_cols else ""
     dynamic_filter_str = dynamic_filter_delimiter + "split_product_type" if has_dynamic_filter else ""
