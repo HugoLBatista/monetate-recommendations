@@ -4,7 +4,7 @@ from django.core.management import BaseCommand
 from monetate_recommendations.precompute_worker import PrecomputeWorker, DEFAULTS
 
 
-LOG = logging.getLogger('monetate_recommendations.precompute_worker')
+LOG = logging.getLogger('recommendations')
 
 
 class Command(BaseCommand):

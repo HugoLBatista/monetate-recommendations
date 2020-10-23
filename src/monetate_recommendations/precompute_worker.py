@@ -28,7 +28,7 @@ from monetate.recs.models import RecommendationsPrecompute
 import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map
 
-LOG = logging.getLogger('monetate_recommendations.precompute_worker')
+LOG = logging.getLogger('recommendations')
 
 
 class DEFAULTS(object):
