@@ -43,7 +43,7 @@ class Command(BaseCommand):
                 retailer=retailer,
             )
 
-            catalog_ids = [dio_models.DefaultAccountCatalog.objects.get(account=6814).schema.id]
+            catalog_ids = [dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id]
             dataset_ids = []
 
             for recset in recsets:
