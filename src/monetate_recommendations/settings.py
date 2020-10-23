@@ -168,6 +168,6 @@ STATIC_URL = '/static/'
 # Import config management settings ####
 
 try:
-    from etc.recs_settings import *
+    from etc.recommendations_settings import *
 except ImportError:
     print("Not importing etc.recs_settings", file=sys.stderr)
