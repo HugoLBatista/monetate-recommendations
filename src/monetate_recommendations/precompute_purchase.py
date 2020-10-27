@@ -35,7 +35,7 @@ GROUP BY 1, 2, 3, 4;
 def precompute_purchase_algorithm(recsets):
     result_counts = []
     # Disable pooling so temp tables do not persist on connections returned to pool
-    engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
+    engine = create_engine(settings.SNOWFLAKE_LOAD_DSN, poolclass=NullPool)
     with job_timing.job_timer('precompute_purchase_algorithm'), contextlib.closing(engine.connect()) as warehouse_conn:
         for recset in recsets:
             if recset and recset.algorithm in ['purchase', 'trending']:
