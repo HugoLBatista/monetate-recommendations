@@ -6,7 +6,7 @@ import monetate.recs.models as recs_models
 import monetate.recs.precompute_constants as precompute_constants
 import monetate.retailer.models as retailer_models
 
-log.configure_script_log('update_stale_recsets')
+log.configure_script_log('enqueue_stale_recsets')
 
 
 class Command(BaseCommand):
@@ -33,9 +33,9 @@ class Command(BaseCommand):
         updated_recsets = []
         created_recsets = []
         for recset in precompute_recsets:
-            precompute_objs = recs_models.RecommendationsPrecompute.objects.filter(recset=recset)
-            if precompute_objs:
-                updated = precompute_objs.filter(
+            precompute_recsets_status = recs_models.RecommendationsPrecompute.objects.filter(recset=recset)
+            if precompute_recsets_status:
+                updated = precompute_recsets_status.filter(
                     precompute_end_time__lt=stale_time,
                 ).exclude(
                     status=precompute_constants.STATUS_PENDING,
@@ -46,16 +46,16 @@ class Command(BaseCommand):
                     attempts=0,
                 )
                 if updated:
-                    updated_recsets.append(precompute_objs[0].recset.id)
+                    updated_recsets.append(precompute_recsets_status[0].recset.id)
             else:
-                precompute_obj = recs_models.RecommendationsPrecompute.objects.create(
+                precompute_recset_status = recs_models.RecommendationsPrecompute.objects.create(
                     recset=recset,
                     status=precompute_constants.STATUS_PENDING,
                     process_complete=False,
                     products_returned=0,
                     attempts=0,
                 )
-                created_recsets.append(precompute_obj.recset.id)
+                created_recsets.append(precompute_recset_status.recset.id)
 
         log.log_info('stale precompute entries updated: {}'.format(updated_recsets))
         log.log_info('new precompute entries created: {}'.format(created_recsets))
