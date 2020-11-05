@@ -1,10 +1,9 @@
-import logging
 from django.core.management import BaseCommand
-
+from monetate.common import log
 from monetate_recommendations.precompute_worker import PrecomputeWorker, DEFAULTS
 
 
-LOG = logging.getLogger('recommendations')
+log.configure_script_log('recommendations_worker')
 
 
 class Command(BaseCommand):
@@ -39,5 +38,5 @@ class Command(BaseCommand):
             worker = PrecomputeWorker(**worker_opts)
             worker.do_work()
         except Exception as e:
-            LOG.exception('Worker threw an uncaught exception: {}'.format(e))
+            log.log_exception('Worker threw an uncaught exception: {}'.format(e))
             raise

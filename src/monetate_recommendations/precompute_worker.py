@@ -15,7 +15,6 @@ Usage
 """
 
 import datetime
-import logging
 import os
 import time
 import threading
@@ -23,12 +22,12 @@ import traceback
 
 from django.utils import timezone
 from django.db.models import Q
-
+from monetate.common import log
 from monetate.recs.models import RecommendationsPrecompute
 import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map
 
-LOG = logging.getLogger('recommendations')
+log.configure_script_log('recommendations_worker')
 
 
 class DEFAULTS(object):
@@ -102,12 +101,13 @@ class PrecomputeWorker(object):
         self.recommendation = None
         self.attempts = 0
 
-    def log(self, msg, level=logging.INFO):
+    def log(self, msg, level=log.LOG_INFO):
         if self.recommendation is not None:
-            LOG.log(level, 'recommendations precompute {}: {}'.format(self.recommendation.id, msg))
+            log.get_error_log().log(format('recommendations precompute {}: {}'.format(self.recommendation.id, msg)),
+                                    priority=level)
             self.recommendation.append_to_status_log('{}: worker {}: {}\n'.format(timezone.now(), self.worker_id, msg))
         else:
-            LOG.log(level, msg)
+            log.get_error_log().log(msg, priority=level)
 
     def do_work(self):
         """
@@ -147,7 +147,7 @@ class PrecomputeWorker(object):
             # Once we get here, file should no longer be in processing state
             # If it is, we messed something up
             if self.recommendation.status == precompute_constants.STATUS_PROCESSING:
-                self.log('Unexpectedly still in processing', level=logging.ERROR)
+                self.log('Unexpectedly still in processing', level=log.LOG_ERR)
                 self.recommendation.status = precompute_constants.STATUS_SYS_ERROR
             self.recommendation.precompute_end_time = timezone.now()
             self.recommendation.processing_time_seconds = int((self.recommendation.precompute_end_time - self.recommendation.precompute_start_time).total_seconds())
@@ -199,11 +199,11 @@ class PrecomputeWorker(object):
                 # NB: since update() does not call save() we need to re-query the rec from the DB
                 rec.refresh_from_db()
                 self.recommendation = rec
-                self.log('Claimed recommendation', logging.DEBUG)
+                self.log('Claimed recommendation', log.LOG_DEBUG)
                 break
             else:
                 # Someone got in and claimed it before me.  Try the next one.
-                self.log('Tried and failed to claim recommendation {}'.format(rec.id), logging.DEBUG)
+                self.log('Tried and failed to claim recommendation {}'.format(rec.id), log.LOG_DEBUG)
         else:
             self.log('Did not claim any recommendation')
             return False
@@ -244,12 +244,12 @@ class PrecomputeWorker(object):
         """Set status and log according to the results of the work"""
         if thread.exception is not None:
             self.recommendation.status = precompute_constants.STATUS_SYS_ERROR
-            self.log('Threw an error during processing: {}'.format(thread.traceback), level=logging.ERROR)
+            self.log('Threw an error during processing: {}'.format(thread.traceback), level=log.LOG_DEBUG)
             raise thread.exception
         else:
             self.recommendation.status = precompute_constants.STATUS_COMPLETE
             self.recommendation.process_complete = True
             self.log('products returned: {}'.format(thread.result))
-            self.recommendation.products_returned = sum(thread.result)
+            self.recommendation.products_returned = sum(thread.result) if thread.result else 0
             if thread.message:
                 self.log(thread.message)

@@ -61,18 +61,19 @@ DATABASES['catalog'] = {
     'PASSWORD': '',
 }
 
-
 if 'SNOWFLAKE_TEST_DSN' in os.environ:
-    SNOWFLAKE_LOAD_DSN = os.environ['SNOWFLAKE_TEST_DSN']
+    SNOWFLAKE_QUERY_DSN = os.environ['SNOWFLAKE_TEST_DSN']
 else:
     try:
         import boto3
         s3 = boto3.resource('s3')
         password_object = s3.Object('secret-monetate-dev', 'db/snowflake/test_user/password.txt')
-        SNOWFLAKE_LOAD_DSN = 'snowflake://test_user:{password}@monetatedev.us-east-1/test_db/'.format(
+        SNOWFLAKE_QUERY_DSN = 'snowflake://test_user:{password}@monetatedev.us-east-1/test_db/'.format(
             password=password_object.get()['Body'].read().strip())
     except Exception:
-        SNOWFLAKE_LOAD_DSN = ''
+        SNOWFLAKE_QUERY_DSN = ''
+if 'SNOWFLAKE_LOAD_DSN' not in os.environ:
+    SNOWFLAKE_LOAD_DSN = SNOWFLAKE_QUERY_DSN
 SNOWFLAKE_SCHEMA = 'NOT_A_TEST_SCHEMA'
 REPORTV3_SNOWFLAKE_STAGE = '@test_db.public.test_reportv3_stage_v1'
 RECO_DIO_SNOWFLAKE_STAGE = '@test_db.public.test_reco_dio_stage_v1'
