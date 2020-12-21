@@ -12,6 +12,7 @@ from monetate_recommendations import precompute_utils
 from monetate_recommendations.precompute_algo_map import FUNC_MAP
 import monetate.dio.models as dio_models
 from monetate.retailer.cache import invalidation_context
+import monetate.retailer.models as retailer_models
 
 # Duct tape fix for running test in monetate_recommendations. Normally this would run as part of the
 # SnowflakeTestCase setup, but the snowflake_schema_path is not the same when ran from monetate_recommendations.
@@ -38,6 +39,20 @@ class RecsTestCase(SnowflakeTestCase):
         """Accounts and product catalog setup common to the three algo tests."""
         super(RecsTestCase, cls).setUpClass()
         cls.account = warehouse_utils.create_account(session_cutover_time=warehouse_utils.LONG_AGO)
+        # create feature flag
+        # Note: normal fixtures for the features not included in monetate-tenant package
+        with invalidation_context():
+            feature_category = retailer_models.AccountFeatureCategory.objects.get_or_create(
+                name='test_precompute',
+                label='Test Precompute'
+            )[0]
+            retailer_models.AccountFeatureFlag.objects.get_or_create(
+                name=retailer_models.ACCOUNT_FEATURES.ENABLE_NONCOLLAB_RECS_PRECOMPUTE,
+                category=feature_category,
+                status='dev',
+                description=''
+            )
+            cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_NONCOLLAB_RECS_PRECOMPUTE)
         cls.account_id = cls.account.id
         cls.retailer_id = cls.account.retailer.id
         cls.product_catalog_id = warehouse_utils.create_default_catalog_schema(cls.account).schema_id

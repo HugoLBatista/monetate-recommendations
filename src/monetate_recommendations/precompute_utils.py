@@ -5,10 +5,10 @@ import json
 import binascii
 import bisect
 from sqlalchemy.sql import text
+from monetate.common import log
 from monetate.common.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate.common.sqlalchemy_session import CLUSTER_MAX
-import monetate.recs.precompute_constants as precompute_constants
 import monetate.retailer.models as retailer_models
 import monetate.dio.models as dio_models
 from monetate_recommendations import product_type_filter_expression
@@ -195,10 +195,21 @@ def get_shard_range(shard_key):
     return shard_boundaries[hi_idx - 1], shard_boundaries[hi_idx]
 
 
-def get_retailer_strategy_accounts(retailer_id):
-    accounts = retailer_models.Account.objects.filter(retailer_id=retailer_id, archived=False)
-    return [account.id for account in accounts if len(dio_models.DefaultAccountCatalog.objects.filter(
-        account=account.id))]
+def get_recset_account_ids(recset):
+    """
+    Return only accounts that have the precompute feature flag.
+    """
+    precompute_feature = retailer_models.ACCOUNT_FEATURES.ENABLE_NONCOLLAB_RECS_PRECOMPUTE
+    account_ids = []
+    if recset.account and recset.account.has_feature(precompute_feature):
+        account_ids.append(recset.account.id)
+    elif recset.is_retailer_tenanted:
+        accounts = retailer_models.Account.objects.filter(retailer_id=recset.retailer.id,
+                                                          archived=False,
+                                                          accountfeature__feature_flag__name=precompute_feature)
+        account_ids = [account.id for account in accounts if len(dio_models.DefaultAccountCatalog.objects.filter(
+            account=account.id))]
+    return account_ids
 
 
 def get_unload_sql(geo_target, has_dynamic_filter):
@@ -281,9 +292,9 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         "shard_key": 847799
     }
     """
-    account_ids = [recset.account.id] if recset.account else get_retailer_strategy_accounts(recset.retailer.id)
     result_counts = []
-    for account_id in account_ids:
+    for account_id in get_recset_account_ids(recset):
+        log.log_info('Querying results for recset {}, account {}'.format(recset.id, account_id))
         product_type_filter, has_dynamic_filter = parse_product_type_filter(recset.filter_json)
         filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
             product_type_filter)
