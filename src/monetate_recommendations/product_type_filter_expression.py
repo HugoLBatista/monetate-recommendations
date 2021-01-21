@@ -1,4 +1,4 @@
-from sqlalchemy import and_, literal_column, not_, or_, text
+from sqlalchemy import and_, literal_column, not_, or_, text, func
 
 
 # Assumptions:
@@ -107,11 +107,67 @@ def not_startswith_expression(expression):
     return not_(startswith_expression(expression))
 
 
+def contains_expression(expression):
+    """Convert `contains` type `filter_json` expressions to SQLAlchemy `BooleanClauseList`.
+    NB:
+    The query effectively matches COMPARISON_OPERATIONS_STRING_TO_LIST['contains'] in filter_json.json_expression
+
+    So, the `filter_json` expression
+    ```
+    {
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "product_type"
+            },
+            "right": {
+                "type": "value",
+                "value": ["red"]
+            }
+        }
+    ```
+    can be rendered as an SQL clause
+    ```sql
+    (lower(product_type) LIKE '%%' red '%%')
+    ```
+
+    `value` must be a python list of strings.
+    - Each string is compared against for the `contains` operation and the results are OR'ed
+      (i.e. if any string matches, the result matches).
+    - Empty lists do not match any value.
+    - Any None values in the list are ignored.
+    """
+
+    field = expression["left"]["field"]
+    value = expression["right"]["value"]
+
+    like_statements = []
+    for i in value:
+        if i is not None:
+            like_statements.append(func.lower(literal_column(field)).contains(i.lower()))
+    if not like_statements:
+        return text("1 = 2")  # Empty lists should return always false
+    # Multiple statements must be OR'ed together.
+    return or_(*like_statements)
+
+
+def not_contains_expression(expression):
+    """Converts a 'not contains' expression to a sqlalchemy expression by wrapping it in a not clause.
+
+    Single-value comparisons are converted to a "NOT LIKE" instead of being wrapped.
+    Falsey comparisons (empty list) are rendered as "NOT 1 = 2".
+    """
+
+    return not_(contains_expression(expression))
+
+
 FILTER_MAP = {
     "and": boolean,
     "or": boolean,
     "startswith": startswith_expression,
     "not startswith": not_startswith_expression,
+    "contains": contains_expression,
+    "not contains": not_contains_expression,
 }
 
 
@@ -148,6 +204,7 @@ def get_product_type_variables(expression):
     variables = {}
     for i, product_type in enumerate(product_types):
         variables["product_type_{}".format(i + 1)] = product_type
+        variables["lower_{}".format(i + 1)] = product_type
     return variables
 
 
