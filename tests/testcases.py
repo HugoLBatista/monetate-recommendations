@@ -13,13 +13,15 @@ from monetate_recommendations.precompute_algo_map import FUNC_MAP
 import monetate.dio.models as dio_models
 from monetate.retailer.cache import invalidation_context
 import monetate.retailer.models as retailer_models
+from monetate.market.models import Market, MarketAccount
 
 # Duct tape fix for running test in monetate_recommendations. Normally this would run as part of the
 # SnowflakeTestCase setup, but the snowflake_schema_path is not the same when ran from monetate_recommendations.
 # This path will allow the tables_used variable to successfully create the necessary tables for the test.
 from monetate.test import testcases
 
-from tests import patch_enqueue_invalidations
+from monetate_recommendations.precompute_utils import get_account_ids_for_market_driven_recsets
+from tests import patch_invalidations
 
 testcases.snowflake_schema_path = os.path.join(os.path.abspath(os.path.join(os.getcwd(), '..', '..')), 'ec2-user',
                                                'monetate-server', 'snowflake', 'tables', 'public')
@@ -101,9 +103,9 @@ class RecsTestCase(SnowflakeTestCase):
             (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30))
         )
 
-    @patch_enqueue_invalidations
+    @patch_invalidations
     def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
-                       geo_target="none", pushdown_filter_hashes=None):
+                       geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None):
         # Insert row into config to mock out a lookback setting
         recs_models.AccountRecommendationSetting.objects.create(
             account=self.account,
@@ -124,7 +126,12 @@ class RecsTestCase(SnowflakeTestCase):
                 order="algorithm",
                 version=1,
                 product_catalog=dio_models.Schema.objects.get(id=self.product_catalog_id),
+                retailer_market_scope=retailer_market_scope,
+                market=self._setup_market(market),
             )
+
+        if retailer_market_scope is True or market is True:
+            self.assertEqual([self.account_id],  get_account_ids_for_market_driven_recsets(recset, -1))
 
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
         unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
@@ -162,3 +169,15 @@ class RecsTestCase(SnowflakeTestCase):
                     self.assertEqual(item[2], actual_result['document']['data'][i]['COUNTRY_CODE'])
                 if len(item) > 3:
                     self.assertEqual(item[3], actual_result['document']['data'][i]['REGION'])
+
+    def _setup_market(self, setup):
+        if setup is True:
+            market = Market.objects.create(
+                name="Market from test",
+                retailer=self.account.retailer
+            )
+            MarketAccount.objects.create(
+                account=self.account,
+                market=market
+            )
+            return market

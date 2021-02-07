@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta
-import json
 import hashlib
+import json
+from datetime import datetime, timedelta
 
-from . import patch_enqueue_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
+
+from . import patch_invalidations
 from .testcases import RecsTestCase
 
 
@@ -11,7 +12,7 @@ class PurchaseValueTestCase(RecsTestCase):
     """Test recsets generated for most viewed products in a country."""
 
     @classmethod
-    @patch_enqueue_invalidations
+    @patch_invalidations
     def setUpClass(cls):
         super(PurchaseValueTestCase, cls).setUpClass()
 
@@ -278,3 +279,51 @@ class PurchaseValueTestCase(RecsTestCase):
             hashlib.sha1('product_type=Clothing > Pants/country_code=US/region=PA'.lower()).hexdigest(),
             hashlib.sha1('product_type=test/country_code=US/region=PA'.lower()).hexdigest(),
         ])
+
+    def test_purchase_retailer_scope(self):
+        # 7-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  2 * $2   (4)        2 * $2 (4)          1 * $2 (2)
+        # TP-00002  3 * $3   (9)        0 * $x (0)          2 * $3 (6)
+        # TP-00003  0 * $x   (0)        0 * $x (0)          3 * $3 (9)
+        #
+        #   TP-00002(SKU-00002): $15
+        #   TP-00005(SKU-00005/SKU-00006): $10
+        #   TP-00003(SKU-00003): $9
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(
+            algorithm="purchase_value",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00002', 1),
+                ('SKU-00005', 2),
+                ('SKU-00006', 3),
+                ('SKU-00003', 4),
+            ],
+            retailer_market_scope=True,
+        )
+
+    def test_purchase_market_scope(self):
+        # 7-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  2 * $2   (4)        2 * $2 (4)          1 * $2 (2)
+        # TP-00002  3 * $3   (9)        0 * $x (0)          2 * $3 (6)
+        # TP-00003  0 * $x   (0)        0 * $x (0)          3 * $3 (9)
+        #
+        #   TP-00002(SKU-00002): $15
+        #   TP-00005(SKU-00005/SKU-00006): $10
+        #   TP-00003(SKU-00003): $9
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(
+            algorithm="purchase_value",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00002', 1),
+                ('SKU-00005', 2),
+                ('SKU-00006', 3),
+                ('SKU-00003', 4),
+            ],
+            market=True,
+        )

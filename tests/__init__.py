@@ -3,7 +3,7 @@ import functools
 import mock
 
 
-def patch_enqueue_invalidations(func):
+def patch_invalidations(func):
     """
     Patches cache.enqueue_invalidations where the backend is not a mysql instance.
 
