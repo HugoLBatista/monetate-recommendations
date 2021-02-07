@@ -72,6 +72,10 @@ INSTALLED_APPS = [
     'monetate.recs',
     'monetate_recommendations',
     'monetate.schema',
+    'monetate.custom_list',
+    'monetate.market',
+    'monetate.mauth',
+    'monetate.email',
 ]
 
 MIDDLEWARE = [
@@ -164,7 +168,8 @@ USE_TZ = False  # Monetate assumes naive datetime in naive_to_retailer
 
 STATIC_URL = '/static/'
 
-
+INVALID_CHARS = ''
+MONETATE_DEVICEATLAS_PATH = '/usr/share/deviceatlas/deviceatlas.json'
 # Import config management settings ####
 
 try:

@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
-import json
 import hashlib
+import json
+from datetime import datetime, timedelta
 
+from . import patch_enqueue_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCase
 
@@ -10,6 +11,7 @@ class MostViewedTestCase(RecsTestCase):
     """Test recsets generated for most viewed products in a country."""
 
     @classmethod
+    @patch_enqueue_invalidations
     def setUpClass(cls):
         super(MostViewedTestCase, cls).setUpClass()
 
@@ -76,7 +78,7 @@ class MostViewedTestCase(RecsTestCase):
             (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
              mid_us_pa[2], 'TP-00002', qty),
             (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
-             mid_us_pa[2],'TP-00002', qty),
+             mid_us_pa[2], 'TP-00002', qty),
 
             # US/NJ viewed 2 x TP-00005
             (within_7_day.date(), mid_us_nj[0], within_7_day, mid_us_nj[1], mid_us_nj[3],

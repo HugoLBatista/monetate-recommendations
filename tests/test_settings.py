@@ -4,7 +4,10 @@ SECRET_KEY = 'test only secret key'  # noqa
 
 MIGRATION_MODULES = {
     "auth": None,
+    "adlink": None,
+    "admin":None,
     "contenttypes": None,
+    "custom_list": None,
     "sessions": None,
     "action": None,
     "analytics": None,
@@ -21,6 +24,7 @@ MIGRATION_MODULES = {
     "key": None,
     "location": None,
     "mauth": None,
+    "market": None,
     "merch": None,
     "milestones": None,
     "notification": None,
@@ -35,6 +39,7 @@ MIGRATION_MODULES = {
     "retailer": None,
     "rule": None,
     "script": None,
+    "schema": None,
     "segmentation": None,
     "system": None,
     "target": None,

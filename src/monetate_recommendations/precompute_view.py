@@ -17,13 +17,13 @@ SELECT
   COUNT(*) subtotal
 FROM m_session_first_geo s
 JOIN fact_product_view fpv
-  ON fpv.account_id = :account_id
+  ON fpv.account_id = s.account_id
   AND fpv.fact_time BETWEEN s.start_time and s.end_time
   AND fpv.mid_ts = s.mid_ts
   AND fpv.mid_rnd = s.mid_rnd
   AND fpv.fact_time >= :begin_fact_time
   AND fpv.fact_time < :end_fact_time
-WHERE s.account_id = :account_id
+WHERE s.account_id IN (:account_ids)
   AND s.start_time >= :begin_session_time
   AND s.start_time < :end_session_time
 GROUP BY 1, 2, 3;

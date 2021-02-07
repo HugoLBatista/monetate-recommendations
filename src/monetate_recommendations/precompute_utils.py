@@ -165,13 +165,13 @@ def parse_product_type_filter(filter_json):
     return filter_dict, has_dynamic_filter
 
 
-def create_metric_table(conn, account_id, lookback, query):
+def create_metric_table(conn, account_ids, lookback, query):
     begin_fact_time = datetime.datetime.today().replace(
         hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=lookback)
     end_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
         begin_fact_time, end_fact_time)
-    conn.execute(query, account_id=account_id, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
+    conn.execute(query, account_ids=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
                  begin_session_time=begin_session_time, end_session_time=end_session_time)
 
 
@@ -270,6 +270,18 @@ def create_unload_target_path(account_id, recset_id):
     return os.path.join(stage, path), bucket_time
 
 
+def get_account_ids_for_market_driven_recsets(recset, account_id):
+    if recset.retailer_market_scope is True:
+        log.log_info('Retailer scoped recset')
+        return [account.id for account in recset.retailer.account_set.all()]
+    if recset.market is not None:
+        log.log_info('Market scoped recset')
+        return [account.id for account in recset.market.accounts.all()]
+    else:
+        log.log_info('Account scoped recset')
+        return [account_id]
+
+
 def process_noncollab_algorithm(conn, recset, metric_table_query):
     """
     Example JSON shape unloaded to s3:
@@ -300,7 +312,8 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
             product_type_filter)
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
-        create_metric_table(conn, account_id, recset.lookback_days,
+        account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
+        create_metric_table(conn, account_ids, recset.lookback_days,
                             text(metric_table_query.format(algorithm=recset.algorithm,
                                                            account_id=account_id,
                                                            lookback=recset.lookback_days)))

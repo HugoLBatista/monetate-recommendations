@@ -18,6 +18,9 @@ import monetate.retailer.models as retailer_models
 # SnowflakeTestCase setup, but the snowflake_schema_path is not the same when ran from monetate_recommendations.
 # This path will allow the tables_used variable to successfully create the necessary tables for the test.
 from monetate.test import testcases
+
+from tests import patch_enqueue_invalidations
+
 testcases.snowflake_schema_path = os.path.join(os.path.abspath(os.path.join(os.getcwd(), '..', '..')), 'ec2-user',
                                                'monetate-server', 'snowflake', 'tables', 'public')
 
@@ -98,6 +101,7 @@ class RecsTestCase(SnowflakeTestCase):
             (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30))
         )
 
+    @patch_enqueue_invalidations
     def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
                        geo_target="none", pushdown_filter_hashes=None):
         # Insert row into config to mock out a lookback setting

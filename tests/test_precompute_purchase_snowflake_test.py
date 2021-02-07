@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import json
 import hashlib
 
+from . import patch_enqueue_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCase
 
@@ -10,6 +11,7 @@ class PurchaseCountTestCase(RecsTestCase):
     """Test recsets generated for most viewed products in a country."""
 
     @classmethod
+    @patch_enqueue_invalidations
     def setUpClass(cls):
         super(PurchaseCountTestCase, cls).setUpClass()
 
