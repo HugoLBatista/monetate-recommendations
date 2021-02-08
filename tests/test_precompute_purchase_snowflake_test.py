@@ -254,3 +254,41 @@ class PurchaseCountTestCase(RecsTestCase):
             ('SKU-00002', 3),
             ('SKU-00003', 4),
         ])
+
+    def test_purchase_filter_contains_multi(self):
+        # skus matching product_type containing "jean":
+        # SKU-00005, SKU-00006
+        filter_json = json.dumps({"type": "and", "filters": [{
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "product_type"
+            },
+            "right": {
+                "type": "value",
+                "value": ["jean"]
+            }
+        }]})
+        self._run_recs_test(algorithm="purchase", lookback=7, filter_json=filter_json, expected_result=[
+            ('SKU-00005', 1),
+            ('SKU-00006', 2),
+        ])
+
+    def test_purchase_filter_not_contains_multi(self):
+        # Products not containing "jean"
+        # SKU-00002, SKU-00003
+        filter_json = json.dumps({"type": "and", "filters": [{
+            "type": "not contains",
+            "left": {
+                "type": "field",
+                "field": "product_type"
+            },
+            "right": {
+                "type": "value",
+                "value": ["jean"]
+            }
+        }]})
+        self._run_recs_test(algorithm="purchase", lookback=7, filter_json=filter_json, expected_result=[
+            ('SKU-00002', 1),
+            ('SKU-00003', 2),
+        ])
