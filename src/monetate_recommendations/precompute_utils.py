@@ -82,7 +82,7 @@ pid_algo AS (
         product_id,
         SUM(subtotal) AS score
         {geo_columns}
-    FROM scratch.{algorithm}_{account_id}_{lookback}
+    FROM scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}
     GROUP BY product_id
     {geo_columns}
 ),
@@ -316,7 +316,10 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         create_metric_table(conn, account_ids, recset.lookback_days,
                             text(metric_table_query.format(algorithm=recset.algorithm,
                                                            account_id=account_id,
-                                                           lookback=recset.lookback_days)))
+                                                           lookback=recset.lookback_days,
+                                                           market_id=recset.market.id if recset.market else None,
+                                                           retailer_scope=recset.retailer_market_scope,
+                                                           )))
         unload_path, send_time = create_unload_target_path(account_id, recset.id)
         unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
 
@@ -325,6 +328,8 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                                                      account_id=account_id,
                                                      lookback=recset.lookback_days,
                                                      filter_query=filter_query,
+                                                     market_id=recset.market.id if recset.market else None,
+                                                     retailer_scope=recset.retailer_market_scope,
                                                      **unload_sql)),
                      retailer_id=recset.retailer.id,
                      catalog_id=catalog_id,

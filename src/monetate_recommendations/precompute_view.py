@@ -8,8 +8,8 @@ from monetate_recommendations import precompute_utils
 log.configure_script_log('precompute_view_algorithm')
 
 MOSTVIEWED_LOOKBACK = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback} AS
-/* Recs metrics: {algorithm}, account {account_id}, {lookback} day  */
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope} AS
+/* Recs metrics: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 SELECT
   fpv.product_id,
   COALESCE(s.country_code, '') country_code,

@@ -8,8 +8,8 @@ from monetate_recommendations import precompute_utils
 log.configure_script_log('precompute_purchase_algorithm')
 
 BESTSELLERS_LOOKBACK = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback} AS
-/* Merchandiser: {algorithm}, account {account_id}, {lookback} day  */
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope} AS
+/* Merchandiser: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 SELECT
     s.account_id,
     fpl.product_id,
