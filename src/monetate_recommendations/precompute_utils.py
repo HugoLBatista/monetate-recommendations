@@ -82,7 +82,7 @@ pid_algo AS (
         product_id,
         SUM(subtotal) AS score
         {geo_columns}
-    FROM scratch.{algorithm}_{account_id}_{lookback}
+    FROM scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}
     GROUP BY product_id
     {geo_columns}
 ),
@@ -165,13 +165,13 @@ def parse_product_type_filter(filter_json):
     return filter_dict, has_dynamic_filter
 
 
-def create_metric_table(conn, account_id, lookback, query):
+def create_metric_table(conn, account_ids, lookback, query):
     begin_fact_time = datetime.datetime.today().replace(
         hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=lookback)
     end_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
         begin_fact_time, end_fact_time)
-    conn.execute(query, account_id=account_id, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
+    conn.execute(query, account_ids=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
                  begin_session_time=begin_session_time, end_session_time=end_session_time)
 
 
@@ -270,6 +270,20 @@ def create_unload_target_path(account_id, recset_id):
     return os.path.join(stage, path), bucket_time
 
 
+def get_account_ids_for_market_driven_recsets(recset, account_id):
+    if recset.retailer_market_scope is True:
+        account_ids = [account.id for account in recset.retailer.account_set.all()]
+        log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids))
+        return account_ids
+    if recset.market is not None:
+        account_ids = [account.id for account in recset.market.accounts.all()]
+        log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids))
+        return account_ids
+    else:
+        log.log_info('Account scoped recset for account {}'.format(account_id))
+        return [account_id]
+
+
 def process_noncollab_algorithm(conn, recset, metric_table_query):
     """
     Example JSON shape unloaded to s3:
@@ -300,10 +314,14 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
             product_type_filter)
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
-        create_metric_table(conn, account_id, recset.lookback_days,
+        account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
+        create_metric_table(conn, account_ids, recset.lookback_days,
                             text(metric_table_query.format(algorithm=recset.algorithm,
                                                            account_id=account_id,
-                                                           lookback=recset.lookback_days)))
+                                                           lookback=recset.lookback_days,
+                                                           market_id=recset.market.id if recset.market else None,
+                                                           retailer_scope=recset.retailer_market_scope,
+                                                           )))
         unload_path, send_time = create_unload_target_path(account_id, recset.id)
         unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
 
@@ -312,6 +330,8 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                                                      account_id=account_id,
                                                      lookback=recset.lookback_days,
                                                      filter_query=filter_query,
+                                                     market_id=recset.market.id if recset.market else None,
+                                                     retailer_scope=recset.retailer_market_scope,
                                                      **unload_sql)),
                      retailer_id=recset.retailer.id,
                      catalog_id=catalog_id,

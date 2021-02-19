@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import json
 import hashlib
 
+from . import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCase
 
@@ -10,6 +11,7 @@ class PurchaseCountTestCase(RecsTestCase):
     """Test recsets generated for most viewed products in a country."""
 
     @classmethod
+    @patch_invalidations
     def setUpClass(cls):
         super(PurchaseCountTestCase, cls).setUpClass()
 
@@ -292,3 +294,51 @@ class PurchaseCountTestCase(RecsTestCase):
             ('SKU-00002', 1),
             ('SKU-00003', 2),
         ])
+
+    def test_purchase_retailer_scope(self):
+        # 7-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  3                   2                   1
+        # TP-00002  3                   0                   2
+        # TP-00003  0                   0                   3
+        #
+        # TP-00005(SKU-00005/SKU-00006): 6
+        # TP-00002(SKU-00002): 5
+        # TP-00003(SKU-00003): 3
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(
+            algorithm="purchase",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00005', 1),
+                ('SKU-00006', 2),
+                ('SKU-00002', 3),
+                ('SKU-00003', 4),
+            ],
+            retailer_market_scope=True,
+        )
+
+    def test_purchase_market_scope(self):
+        # 7-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  3                   2                   1
+        # TP-00002  3                   0                   2
+        # TP-00003  0                   0                   3
+        #
+        # TP-00005(SKU-00005/SKU-00006): 6
+        # TP-00002(SKU-00002): 5
+        # TP-00003(SKU-00003): 3
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(
+            algorithm="purchase",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00005', 1),
+                ('SKU-00006', 2),
+                ('SKU-00002', 3),
+                ('SKU-00003', 4),
+            ],
+            market=True,
+        )

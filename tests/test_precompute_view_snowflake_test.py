@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
-import json
 import hashlib
+import json
+from datetime import datetime, timedelta
 
+from . import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCase
 
@@ -10,6 +11,7 @@ class MostViewedTestCase(RecsTestCase):
     """Test recsets generated for most viewed products in a country."""
 
     @classmethod
+    @patch_invalidations
     def setUpClass(cls):
         super(MostViewedTestCase, cls).setUpClass()
 
@@ -76,7 +78,7 @@ class MostViewedTestCase(RecsTestCase):
             (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
              mid_us_pa[2], 'TP-00002', qty),
             (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
-             mid_us_pa[2],'TP-00002', qty),
+             mid_us_pa[2], 'TP-00002', qty),
 
             # US/NJ viewed 2 x TP-00005
             (within_7_day.date(), mid_us_nj[0], within_7_day, mid_us_nj[1], mid_us_nj[3],
@@ -280,3 +282,51 @@ class MostViewedTestCase(RecsTestCase):
             hashlib.sha1('product_type=Clothing > Pants'.lower()).hexdigest(),
             hashlib.sha1('product_type=test'.lower()).hexdigest(),
         ])
+
+    def test_view_retailer_scope(self):
+        # 7-day totals:
+        # PRODUCT   Views in US/PA      Views in US/NJ      Views in CA/ON
+        # TP-00005  2                   2                   1
+        # TP-00002  5                   0                   2
+        # TP-00003  0                   0                   3
+        #
+        # TP-00002(SKU-00002): 7
+        # TP-00005(SKU-00005/SKU-00006): 5
+        # TP-00003(SKU-00003): 3
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(
+            algorithm="view",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00002', 1),
+                ('SKU-00005', 2),
+                ('SKU-00006', 3),
+                ('SKU-00003', 4),
+            ],
+            retailer_market_scope=True,
+        )
+
+    def test_view_market_scope(self):
+        # 7-day totals:
+        # PRODUCT   Views in US/PA      Views in US/NJ      Views in CA/ON
+        # TP-00005  2                   2                   1
+        # TP-00002  5                   0                   2
+        # TP-00003  0                   0                   3
+        #
+        # TP-00002(SKU-00002): 7
+        # TP-00005(SKU-00005/SKU-00006): 5
+        # TP-00003(SKU-00003): 3
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(
+            algorithm="view",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00002', 1),
+                ('SKU-00005', 2),
+                ('SKU-00006', 3),
+                ('SKU-00003', 4),
+            ],
+            market=True,
+        )

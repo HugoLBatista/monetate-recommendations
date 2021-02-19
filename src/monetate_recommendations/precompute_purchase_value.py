@@ -8,8 +8,8 @@ from monetate_recommendations import precompute_utils
 log.configure_script_log('precompute_purchase_value_algorithm')
 
 TOPREVENUE_LOOKBACK = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback} AS
-/* Merchandiser: {algorithm}, account {account_id}, {lookback} day  */
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope} AS
+/* Merchandiser: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 WITH purchase_line_value AS (
   SELECT
       f.account_id,
@@ -21,7 +21,7 @@ WITH purchase_line_value AS (
       f.quantity * f.currency_unit_price * ex.rate account_value
   FROM m_dedup_purchase_line f
   JOIN config_account a
-      ON a.account_id = :account_id
+      ON a.account_id = f.account_id
   JOIN exchange_rate ex
       ON ex.effective_date::date = f.fact_time::date
       AND ex.from_currency_code = f.currency
@@ -29,6 +29,7 @@ WITH purchase_line_value AS (
   WHERE f.product_id is NOT NULL
       AND f.fact_time >= :begin_fact_time
       AND f.fact_time < :end_fact_time
+      AND a.account_id IN (:account_ids)
 )
 SELECT
     s.account_id,
@@ -38,13 +39,14 @@ SELECT
     SUM(f.account_value) as subtotal
 FROM m_session_first_geo s
 JOIN purchase_line_value f
-    ON f.account_id = :account_id
+    ON f.account_id = s.account_id
     AND f.fact_time BETWEEN s.start_time and s.end_time
     AND f.mid_ts = s.mid_ts
     AND f.mid_rnd = s.mid_rnd
-WHERE s.start_time >= :begin_session_time
+WHERE 
+    s.start_time >= :begin_session_time
     AND s.start_time < :end_session_time
-    AND s.account_id = :account_id
+    AND s.account_id IN (:account_ids)
 GROUP BY 1, 2, 3, 4;
 """
 

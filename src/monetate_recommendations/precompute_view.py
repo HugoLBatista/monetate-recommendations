@@ -8,8 +8,8 @@ from monetate_recommendations import precompute_utils
 log.configure_script_log('precompute_view_algorithm')
 
 MOSTVIEWED_LOOKBACK = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback} AS
-/* Recs metrics: {algorithm}, account {account_id}, {lookback} day  */
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope} AS
+/* Recs metrics: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 SELECT
   fpv.product_id,
   COALESCE(s.country_code, '') country_code,
@@ -17,13 +17,13 @@ SELECT
   COUNT(*) subtotal
 FROM m_session_first_geo s
 JOIN fact_product_view fpv
-  ON fpv.account_id = :account_id
+  ON fpv.account_id = s.account_id
   AND fpv.fact_time BETWEEN s.start_time and s.end_time
   AND fpv.mid_ts = s.mid_ts
   AND fpv.mid_rnd = s.mid_rnd
   AND fpv.fact_time >= :begin_fact_time
   AND fpv.fact_time < :end_fact_time
-WHERE s.account_id = :account_id
+WHERE s.account_id IN (:account_ids)
   AND s.start_time >= :begin_session_time
   AND s.start_time < :end_session_time
 GROUP BY 1, 2, 3;

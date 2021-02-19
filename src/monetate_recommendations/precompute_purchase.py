@@ -8,8 +8,8 @@ from monetate_recommendations import precompute_utils
 log.configure_script_log('precompute_purchase_algorithm')
 
 BESTSELLERS_LOOKBACK = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback} AS
-/* Merchandiser: {algorithm}, account {account_id}, {lookback} day  */
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope} AS
+/* Merchandiser: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 SELECT
     s.account_id,
     fpl.product_id,
@@ -18,7 +18,7 @@ SELECT
     SUM(fpl.quantity) as subtotal
 FROM m_session_first_geo s
 JOIN m_dedup_purchase_line fpl
-    ON fpl.account_id = :account_id
+    ON fpl.account_id = s.account_id
     AND fpl.fact_time BETWEEN s.start_time and s.end_time
     AND fpl.mid_ts = s.mid_ts
     AND fpl.mid_rnd = s.mid_rnd
@@ -27,7 +27,7 @@ JOIN m_dedup_purchase_line fpl
     AND fpl.product_id is NOT NULL
 WHERE s.start_time >= :begin_session_time
     AND s.start_time < :end_session_time
-    AND s.account_id = :account_id
+    AND s.account_id IN (:account_ids)
 GROUP BY 1, 2, 3, 4;
 """
 
