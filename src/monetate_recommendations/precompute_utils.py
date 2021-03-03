@@ -164,15 +164,25 @@ def parse_product_type_filter(filter_json):
 
     return filter_dict, has_dynamic_filter
 
+def create_metric_table(conn, account_ids, lookback, algorithm, query):
 
-def create_metric_table(conn, account_ids, lookback, query):
     begin_fact_time = datetime.datetime.today().replace(
         hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=lookback)
     end_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
         begin_fact_time, end_fact_time)
-    conn.execute(query, account_ids=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
-                 begin_session_time=begin_session_time, end_session_time=end_session_time)
+
+    if algorithm == 'trending':
+        begin_trending_fact_time = datetime.datetime.today().replace(
+            hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=30)
+        end_trending_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        conn.execute(query, account_id=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
+                     begin_session_time=begin_session_time, end_session_time=end_session_time,
+                     begin_trending_fact_time=begin_trending_fact_time, end_trending_fact_time=end_trending_fact_time)
+    else:
+        conn.execute(query, account_ids=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
+                     begin_session_time=begin_session_time, end_session_time=end_session_time)
+
 
 
 def get_shard_key(account_id):
@@ -273,11 +283,11 @@ def create_unload_target_path(account_id, recset_id):
 def get_account_ids_for_market_driven_recsets(recset, account_id):
     if recset.retailer_market_scope is True:
         account_ids = [account.id for account in recset.retailer.account_set.all()]
-        log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids))
+        log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids)))
         return account_ids
     if recset.market is not None:
         account_ids = [account.id for account in recset.market.accounts.all()]
-        log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids))
+        log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids)))
         return account_ids
     else:
         log.log_info('Account scoped recset for account {}'.format(account_id))
@@ -315,7 +325,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
-        create_metric_table(conn, account_ids, recset.lookback_days,
+        create_metric_table(conn, account_ids, recset.lookback_days, recset.algorithm,
                             text(metric_table_query.format(algorithm=recset.algorithm,
                                                            account_id=account_id,
                                                            lookback=recset.lookback_days,
