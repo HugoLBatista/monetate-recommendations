@@ -273,11 +273,11 @@ def create_unload_target_path(account_id, recset_id):
 def get_account_ids_for_market_driven_recsets(recset, account_id):
     if recset.retailer_market_scope is True:
         account_ids = [account.id for account in recset.retailer.account_set.all()]
-        log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids))
+        log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids)))
         return account_ids
     if recset.market is not None:
         account_ids = [account.id for account in recset.market.accounts.all()]
-        log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids))
+        log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids)))
         return account_ids
     else:
         log.log_info('Account scoped recset for account {}'.format(account_id))
