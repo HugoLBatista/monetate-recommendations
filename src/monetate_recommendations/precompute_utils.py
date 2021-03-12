@@ -164,6 +164,7 @@ def parse_product_type_filter(filter_json):
 
     return filter_dict, has_dynamic_filter
 
+
 def create_metric_table(conn, account_ids, lookback, algorithm, query):
 
     begin_fact_time = datetime.datetime.today().replace(
@@ -173,16 +174,21 @@ def create_metric_table(conn, account_ids, lookback, algorithm, query):
         begin_fact_time, end_fact_time)
 
     if algorithm == 'trending':
-        begin_trending_fact_time = datetime.datetime.today().replace(
+        begin_30_day_fact_time = datetime.datetime.today().replace(
             hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=30)
-        end_trending_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-        conn.execute(query, account_id=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
-                     begin_session_time=begin_session_time, end_session_time=end_session_time,
-                     begin_trending_fact_time=begin_trending_fact_time, end_trending_fact_time=end_trending_fact_time)
+        end_30_day_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        begin_30_day_session_time, end_30_day_session_time = sqlalchemy_warehouse.get_session_time_bounds(
+            begin_30_day_fact_time, end_30_day_fact_time
+        )
+        conn.execute(query, account_ids=account_ids, begin_7_day_fact_time=begin_fact_time,
+                     end_7_day_fact_time=end_fact_time, begin_7_day_session_time=begin_session_time,
+                     end_7_day_session_time=end_session_time, begin_30_day_fact_time=begin_30_day_fact_time,
+                     end_30_day_fact_time=end_30_day_fact_time, begin_30_day_session_time=begin_30_day_session_time,
+                     end_30_day_session_time=end_30_day_session_time)
+
     else:
         conn.execute(query, account_ids=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
                      begin_session_time=begin_session_time, end_session_time=end_session_time)
-
 
 
 def get_shard_key(account_id):
