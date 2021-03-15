@@ -38,7 +38,7 @@ def precompute_purchase_algorithm(recsets):
     engine = create_engine(settings.SNOWFLAKE_LOAD_DSN, poolclass=NullPool)
     with job_timing.job_timer('precompute_purchase_algorithm'), contextlib.closing(engine.connect()) as warehouse_conn:
         for recset in recsets:
-            if recset and recset.algorithm in ['purchase', 'trending']:
+            if recset and recset.algorithm == 'purchase':
                 log.log_info('processing recset {}'.format(recset.id))
                 result_counts.append(precompute_utils.process_noncollab_algorithm(warehouse_conn, recset,
                                                                                   BESTSELLERS_LOOKBACK))

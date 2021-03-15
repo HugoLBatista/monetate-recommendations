@@ -165,14 +165,30 @@ def parse_product_type_filter(filter_json):
     return filter_dict, has_dynamic_filter
 
 
-def create_metric_table(conn, account_ids, lookback, query):
+def create_metric_table(conn, account_ids, lookback, algorithm, query):
+
     begin_fact_time = datetime.datetime.today().replace(
         hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=lookback)
     end_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
         begin_fact_time, end_fact_time)
-    conn.execute(query, account_ids=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
-                 begin_session_time=begin_session_time, end_session_time=end_session_time)
+
+    if algorithm == 'trending':
+        begin_30_day_fact_time = datetime.datetime.today().replace(
+            hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=30)
+        end_30_day_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        begin_30_day_session_time, end_30_day_session_time = sqlalchemy_warehouse.get_session_time_bounds(
+            begin_30_day_fact_time, end_30_day_fact_time
+        )
+        conn.execute(query, account_ids=account_ids, begin_7_day_fact_time=begin_fact_time,
+                     end_7_day_fact_time=end_fact_time, begin_7_day_session_time=begin_session_time,
+                     end_7_day_session_time=end_session_time, begin_30_day_fact_time=begin_30_day_fact_time,
+                     end_30_day_fact_time=end_30_day_fact_time, begin_30_day_session_time=begin_30_day_session_time,
+                     end_30_day_session_time=end_30_day_session_time)
+
+    else:
+        conn.execute(query, account_ids=account_ids, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
+                     begin_session_time=begin_session_time, end_session_time=end_session_time)
 
 
 def get_shard_key(account_id):
@@ -315,7 +331,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
-        create_metric_table(conn, account_ids, recset.lookback_days,
+        create_metric_table(conn, account_ids, recset.lookback_days, recset.algorithm,
                             text(metric_table_query.format(algorithm=recset.algorithm,
                                                            account_id=account_id,
                                                            lookback=recset.lookback_days,
