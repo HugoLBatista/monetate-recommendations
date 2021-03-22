@@ -10,6 +10,7 @@ FUNC_MAP = {
     'purchase': precompute_purchase_algorithm,
     'trending': precompute_trending_algorithm,
     'purchase_value': precompute_purchase_value_algorithm,
+    'most_popular': precompute_view_algorithm,
 }
 
 

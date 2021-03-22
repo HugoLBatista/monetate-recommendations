@@ -36,7 +36,7 @@ def precompute_view_algorithm(recsets):
     engine = create_engine(settings.SNOWFLAKE_LOAD_DSN, poolclass=NullPool)
     with job_timing.job_timer('precompute_view_algorithm'), contextlib.closing(engine.connect()) as warehouse_conn:
         for recset in recsets:
-            if recset and recset.algorithm == 'view':
+            if recset and recset.algorithm in ['view', 'most_popular']:
                 log.log_info('processing recset {}'.format(recset.id))
                 result_counts.append(precompute_utils.process_noncollab_algorithm(warehouse_conn, recset,
                                                                                   MOSTVIEWED_LOOKBACK))
