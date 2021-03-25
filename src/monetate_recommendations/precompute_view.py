@@ -1,5 +1,6 @@
 from django.conf import settings
 import contextlib
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from monetate.common import job_timing, log
@@ -33,8 +34,10 @@ GROUP BY 1, 2, 3;
 def precompute_view_algorithm(recsets):
     result_counts = []
     # Disable pooling so temp tables do not persist on connections returned to pool
-    engine = create_engine(settings.SNOWFLAKE_LOAD_DSN, poolclass=NullPool)
+    engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
     with job_timing.job_timer('precompute_view_algorithm'), contextlib.closing(engine.connect()) as warehouse_conn:
+        warehouse_conn.execute("use warehouse {}".format(
+            getattr(settings, 'RECS_QUERY_WH', os.environ.get('RECS_QUERY_WH', 'QUERY2_WH'))))
         for recset in recsets:
             if recset and recset.algorithm in ['view', 'most_popular']:
                 log.log_info('processing recset {}'.format(recset.id))
