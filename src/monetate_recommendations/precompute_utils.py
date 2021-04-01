@@ -76,7 +76,7 @@ FROM scratch.recset_{account_id}_{recset_id}_ranks
 SKU_RANKS_BY_RECSET = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.recset_{account_id}_{recset_id}_ranks AS
 WITH
-pid_algo AS (
+pid_algo_raw AS (
     /* Aggregates per product_id for an account at appropriate geo_rollup level */
     SELECT
         product_id,
@@ -85,6 +85,12 @@ pid_algo AS (
     FROM scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}
     GROUP BY product_id
     {geo_columns}
+),
+pid_max_score AS (SELECT MAX(score) as max_score FROM pid_algo_raw),
+pid_algo AS (
+    SELECT product_id, ceil((score / max_score) * 1000, 2) AS score {geo_columns}
+    FROM pid_algo_raw, pid_max_score
+    GROUP BY product_id, max_score, score {geo_columns}
 ),
 reduced_catalog AS (
     /*
