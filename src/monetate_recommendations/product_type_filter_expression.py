@@ -161,6 +161,50 @@ def not_contains_expression(expression):
     return not_(contains_expression(expression))
 
 
+def exact_equal_expression(expression):
+    """Convert `equals` type `filter_json` expressions to SQLAlchemy `BooleanClauseList`.
+       NB:
+       The query effectively matches COMPARISON_OPERATIONS_STRING_TO_LIST['contains'] in filter_json.json_expression
+
+       So, the `filter_json` expression
+       ```
+       {
+               "type": "==",
+               "left": {
+                   "type": "field",
+                   "field": "product_type"
+               },
+               "right": {
+                   "type": "value",
+                   "value": ["red"]
+               }
+           }
+       ```
+       can be rendered as an SQL clause
+       ```sql
+       (product_type == red)
+       ```
+
+       `value` must be a python list of strings.
+       - Each string is compared against for the `==` operation and the results are OR'ed
+         (i.e. if any string matches, the result matches).
+       - Empty lists do not match any value.
+       - Any None values in the list are ignored.
+       """
+
+    field = expression["left"]["field"]
+    value = expression["right"]["value"]
+
+    like_statements = []
+    for i in value:
+        if i is not None:
+            like_statements.append(literal_column(field).__eq__(i))
+    if not like_statements:
+        return text("1 = 2")  # Empty lists should return always false
+    # Multiple statements must be OR'ed together.
+    return or_(*like_statements)
+
+
 FILTER_MAP = {
     "and": boolean,
     "or": boolean,
@@ -168,6 +212,7 @@ FILTER_MAP = {
     "not startswith": not_startswith_expression,
     "contains": contains_expression,
     "not contains": not_contains_expression,
+    "==": exact_equal_expression,
 }
 
 
