@@ -66,10 +66,12 @@ class RecsTestCase(SnowflakeTestCase):
         cls.conn.execute(
             """
             INSERT INTO config_account
-            (account_id, name, instance, domain, timezone, currency, archived, session_cutover_time, retailer_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (account_id, name, instance, domain, timezone, currency, archived, session_cutover_time, 
+            retailer_id, retailer_name)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (cls.account_id, cls.account.name, 'p', 'example.com', 'EST', 'USD', 0, None, cls.retailer_id)
+            (cls.account.id, cls.account.name, 'p', 'example.com', 'EST', 'USD', 0, None,
+             cls.account.retailer.id, cls.account.retailer.name)
         )
         cls.conn.execute(
             """
