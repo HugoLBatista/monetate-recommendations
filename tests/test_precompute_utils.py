@@ -28,9 +28,34 @@ class PrecomputeUtilsTestCase(TestCase):
                     "type": "value",
                     "value": ["Monetate"]
                 }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brandabc"  # tests that we exclude fields which we don't recognize
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Monetate"]
+                }
             }]
         })
-        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        expected_early = {
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Monetate"]
+                }
+            }]
+        }
+        self.assertEqual(early_filter, expected_early)
         expected = {
             "type": "and",
             "filters": [{
@@ -53,12 +78,13 @@ class PrecomputeUtilsTestCase(TestCase):
             "type": "and",
             "filters": []
         })
-        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
         expected = {
             "type": "and",
             "filters": []
         }
         self.assertEqual(result, expected)
+        self.assertEqual(early_filter, expected)
         self.assertFalse(has_dynamic)
 
     def test_parse_product_type_filter_dynamic(self):
@@ -78,12 +104,13 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
         expected = {
             "type": "and",
             "filters": []
         }
         self.assertEqual(result, expected)
+        self.assertEqual(early_filter, expected)
         self.assertTrue(has_dynamic)
 
     def test_parse_product_type_filter_multiple(self):
@@ -111,7 +138,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        result, has_dynamic = precompute_utils.parse_product_type_filter(filter_json)
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
         expected = {
             "type": "or",
             "filters": [{
@@ -136,7 +163,108 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         }
+        expected_early = {
+            "type": "or",
+            "filters": []
+        }
+        self.assertEqual(early_filter, expected_early)
         self.assertEqual(result, expected)
+        self.assertFalse(has_dynamic)
+
+    def test_parse_or_across_product_type_and_normal(self):
+        # we can't 'or' across product_type and other filters because of how the filters are performed in two separate
+        # spots, so this should be excluded
+        filter_json = json.dumps({
+            "type": "or",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Halloween > Texas"]
+                }
+            }]
+        })
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        expected = {
+            "type": "or",
+            "filters": []
+        }
+        self.assertEqual(result, expected)
+        self.assertEqual(early_filter, expected)
+        self.assertFalse(has_dynamic)
+
+    def test_parse_and_across_product_type_and_normal(self):
+        # we can't 'or' across product_type and other filters because of how the filters are performed in two separate
+        # spots, so this should be excluded
+        filter_json = json.dumps({
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Halloween > Texas"]
+                }
+            }]
+        })
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        expected = {
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Halloween > Texas"]
+                }
+            }]
+        }
+        expected_early = {
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }]
+        }
+        self.assertEqual(result, expected)
+        self.assertEqual(early_filter, expected_early)
         self.assertFalse(has_dynamic)
 
     def test_get_unload_target_path(self):

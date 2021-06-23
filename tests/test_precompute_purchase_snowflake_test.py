@@ -295,6 +295,197 @@ class PurchaseCountTestCase(RecsTestCase):
             ('SKU-00003', 2),
         ])
 
+    def test_complex_filters(self):
+        filter_json = {"type": "and", "filters": [{
+            "type": "not contains",
+            "left": {
+                "type": "field",
+                "field": "product_type"
+            },
+            "right": {
+                "type": "value",
+                "value": ["jean"]
+            }
+        }, {
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "brand"
+            },
+            "right": {
+                "type": "value",
+                "value": ["c"]
+            }
+        }, {
+            "type": ">=",
+            "left": {
+                "type": "field",
+                "field": "price"
+            },
+            "right": {
+                "type": "value",
+                "value": 2.99
+            }
+        }, {
+            "type": "<=",
+            "left": {
+                "type": "field",
+                "field": "price"
+            },
+            "right": {
+                "type": "value",
+                "value": 3.99
+            }
+        }, {
+            "type": "==",
+            "left": {
+                "type": "field",
+                "field": "is_bundle"
+            },
+            "right": {
+                "type": "value",
+                "value": True
+            }
+        }, {
+            "type": "==",
+            "left": {
+                "type": "field",
+                "field": "is_bundle_dsfds" # tests that we exclude this filter, since we don't recognize it
+            },
+            "right": {
+                "type": "value",
+                "value": False
+            }
+        }]}
+        self._run_recs_test(algorithm="purchase", lookback=7, filter_json=json.dumps(filter_json), expected_result=[
+            ('SKU-00002', 1),
+            ('SKU-00003', 2),
+        ])
+        # replace the max price with a strictly less than
+        filter_json["filters"][3]["type"] = "<"
+        self._run_recs_test(algorithm="purchase", lookback=7, filter_json=json.dumps(filter_json), expected_result=[
+            ('SKU-00002', 1),
+        ])
+
+        # revert max price to lt or eq
+        filter_json["filters"][3]["type"] = "<="
+        # change brand contains filter to "d"
+        filter_json["filters"][1]["right"]["value"][0] = "d"
+        self._run_recs_test(algorithm="purchase", lookback=7, filter_json=json.dumps(filter_json), expected_result=[
+            ('SKU-00003', 1),
+        ])
+
+        # require is_bundle to be False
+        filter_json["filters"][4]["right"]["value"] = False
+        self._run_recs_test(algorithm="purchase", lookback=7, filter_json=json.dumps(filter_json), expected_result=[])
+
+    def test_unrecognized_filter_with_or_prevents_filtering(self):
+        filter_json = {"type": "or", "filters": [{
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "brand"
+            },
+            "right": {
+                "type": "value",
+                "value": ["c"]
+            }
+        }, {
+            "type": "==",
+            "left": {
+                "type": "field",
+                "field": "is_bundle_dsfds"  # tests an unrecognized filter
+            },
+            "right": {
+                "type": "value",
+                "value": False
+            }
+        }]}
+        # tests that an or filter with an unrecognized input prevents application of any filters at all
+        self._run_recs_test(
+            algorithm="purchase",
+            lookback=7,
+            filter_json=json.dumps(filter_json),
+            expected_result=[
+                ('SKU-00005', 1),
+                ('SKU-00006', 2),
+                ('SKU-00002', 3),
+                ('SKU-00003', 4),
+            ],
+            retailer_market_scope=True,
+        )
+
+    def test_unrecognized_filter_with_or_prevents_filtering_2(self):
+        filter_json = {"type": "or", "filters": [{
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "brand"
+            },
+            "right": {
+                "type": "value",
+                "value": ["c"]
+            }
+        }, {
+            "type": "dd",  # tests an unrecognized filter
+            "left": {
+                "type": "field",
+                "field": "is_bundle"
+            },
+            "right": {
+                "type": "value",
+                "value": False
+            }
+        }]}
+        # tests that an or filter with an unrecognized input prevents application of any filters at all
+        self._run_recs_test(
+            algorithm="purchase",
+            lookback=7,
+            filter_json=json.dumps(filter_json),
+            expected_result=[
+                ('SKU-00005', 1),
+                ('SKU-00006', 2),
+                ('SKU-00002', 3),
+                ('SKU-00003', 4),
+            ],
+            retailer_market_scope=True,
+        )
+
+    def test_or_filtering(self):
+        filter_json = {"type": "or", "filters": [{
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "brand"
+            },
+            "right": {
+                "type": "value",
+                "value": ["c"]
+            }
+        }, {
+            "type": "==",
+            "left": {
+                "type": "field",
+                "field": "is_bundle"  # tests an unrecognized filter
+            },
+            "right": {
+                "type": "value",
+                "value": False
+            }
+        }]}
+        # tests that an or filter with an unrecognized input prevents application of any filters at all
+        self._run_recs_test(
+            algorithm="purchase",
+            lookback=7,
+            filter_json=json.dumps(filter_json),
+            expected_result=[
+                ('SKU-00005', 1),
+                ('SKU-00002', 2),
+                ('SKU-00003', 3),
+            ],
+            retailer_market_scope=True,
+        )
+
     def test_purchase_retailer_scope(self):
         # 7-day totals:
         # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
