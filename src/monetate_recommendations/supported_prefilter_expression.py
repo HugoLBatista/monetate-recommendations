@@ -1,4 +1,14 @@
-from sqlalchemy import and_, literal_column, not_, or_, text, func
+from sqlalchemy import and_, literal_column, not_, or_, text, func, collate
+
+# NOTE: availability/availability_date/expiration_date/sale_price_effective_date_begin/sale_price_effective_date_end
+# not included so that such filters make the results update quickly
+NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
+    'shipping_label', 'description', 'shipping_height', 'mpn', 'price', 'material', 'tax', 'shipping_weight',
+    'image_link', 'color', 'link', 'adult', 'promotion_id', 'multipack', 'age_group', 'id', 'condition', 'size',
+    'shipping', 'shipping_length', 'product_type', 'energy_efficiency_class', 'title', 'gender', 'size_type',
+    'shipping_width', 'is_bundle', 'additional_image_link', 'loyalty_points', 'pattern', 'sale_price', 'mobile_link',
+    'brand', 'item_group_id']
+SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
 
 
 # Assumptions:
@@ -69,7 +79,8 @@ def startswith_expression(expression):
     for i in value:
         if i is not None:
             like_statements.append(literal_column(field).startswith(i))
-            like_statements.append(literal_column(field).contains(',' + i))
+            if field == 'product_type':
+                like_statements.append(literal_column(field).contains(',' + i))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
@@ -161,48 +172,39 @@ def not_contains_expression(expression):
     return not_(contains_expression(expression))
 
 
-def exact_equal_expression(expression):
-    """Convert `equals` type `filter_json` expressions to SQLAlchemy `BooleanClauseList`.
-       NB:
-       The query effectively matches COMPARISON_OPERATIONS_STRING_TO_LIST['contains'] in filter_json.json_expression
+def get_field_and_lower_val(expression):
+    return expression["left"]["field"], [(v.lower() if type(v) == str else v) for v in expression["right"]["value"]]
 
-       So, the `filter_json` expression
-       ```
-       {
-               "type": "==",
-               "left": {
-                   "type": "field",
-                   "field": "product_type"
-               },
-               "right": {
-                   "type": "value",
-                   "value": ["red"]
-               }
-           }
-       ```
-       can be rendered as an SQL clause
-       ```sql
-       (product_type == red)
-       ```
 
-       `value` must be a python list of strings.
-       - Each string is compared against for the `==` operation and the results are OR'ed
-         (i.e. if any string matches, the result matches).
-       - Empty lists do not match any value.
-       - Any None values in the list are ignored.
-       """
+def in_expression(expression):
+    field, value = get_field_and_lower_val(expression)
+    return func.lower(literal_column(field)).in_(value)
 
+
+def not_in_expression(expression):
+    return not_(in_expression(expression))
+
+
+SQL_COMPARISON_TO_PYTHON_COMPARISON = {
+    "==": "__eq__",
+    "!=": "__ne__",
+    ">": "__gt__",
+    ">=": "__ge__",
+    "<": "__lt__",
+    "<=": "__le__",
+}
+
+
+def direct_sql_expression(expression):
     field = expression["left"]["field"]
     value = expression["right"]["value"]
-
-    like_statements = []
-    for i in value:
-        if i is not None:
-            like_statements.append(literal_column(field).__eq__(i))
-    if not like_statements:
-        return text("1 = 2")  # Empty lists should return always false
-    # Multiple statements must be OR'ed together.
-    return or_(*like_statements)
+    # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
+    python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
+    # iterate through each item in the list of values and getattr to invoke the right comparison function
+    statements = [getattr(literal_column(field), python_expr_equivalent)(i) for i in value if i is not None]\
+        if type(value) is list else [getattr(literal_column(field), python_expr_equivalent)(value)]
+    # Multiple statements must be OR'ed together. Empty lists should return always false (1 = 2)
+    return or_(*statements) if statements else text("1 = 2")
 
 
 FILTER_MAP = {
@@ -212,45 +214,15 @@ FILTER_MAP = {
     "not startswith": not_startswith_expression,
     "contains": contains_expression,
     "not contains": not_contains_expression,
-    "==": exact_equal_expression,
+    "in": in_expression,
+    "not in": not_in_expression,
+    "==": direct_sql_expression,
+    "!=": direct_sql_expression,
+    ">": direct_sql_expression,
+    ">=": direct_sql_expression,
+    "<": direct_sql_expression,
+    "<=": direct_sql_expression,
 }
-
-
-def get_product_type_variables(expression):
-    """Gets all product type variables to be used with a filter expression
-    {
-        "type": "startswith",
-        "left": {
-            "type": "field",
-            "field": "product_type"
-        },
-        "right": {
-            "type": "value",
-            "value": ["Apparel > Jeans", "Halloween > Texas"]
-        }
-    }
-    -->
-    {
-        "product_type_1": "Apparel > Jeans",
-        "product_type_2": ",Apparel > Jeans",
-        "product_type_3": "Halloween > Texas"
-        "product_type_4": ",Halloween > Texas"
-    }
-    """
-    filters = expression.get("filters")
-    product_types = []
-    if filters and len(filters):
-        for f in filters:
-            if f["left"]["field"] == "product_type":
-                for value in f["right"]["value"]:
-                    # Each product_type gets two LIKE statements, the second matches when startswith ','
-                    product_types.append(value)
-                    product_types.append(',' + value)
-    variables = {}
-    for i, product_type in enumerate(product_types):
-        variables["product_type_{}".format(i + 1)] = product_type
-        variables["lower_{}".format(i + 1)] = product_type
-    return variables
 
 
 def convert(expression):
@@ -258,7 +230,11 @@ def convert(expression):
     return FILTER_MAP[expression_type](expression)
 
 
-def get_query_and_variables(expression):
-    filter_variables = get_product_type_variables(expression)
-    filter_query = text('WHERE {}'.format(convert(expression))) if len(filter_variables.keys()) else ''
-    return filter_variables, filter_query
+def get_query_and_variables(product_type_expression, non_product_type_expression):
+    # we collate here to make sure that variable names dont get reused, e.g. "lower_1" showing up twice
+    sql_expression = collate(convert(product_type_expression), convert(non_product_type_expression))
+    [early_filter, late_filter] = str(sql_expression).split(" COLLATE ")
+    params = sql_expression.compile().params if sql_expression is not None else {}
+    return ("AND " + early_filter) if early_filter != "NULL" else '', \
+           ("WHERE " + late_filter) if late_filter != "NULL" else '', \
+           params

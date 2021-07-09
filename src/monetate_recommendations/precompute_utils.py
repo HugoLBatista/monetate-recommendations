@@ -4,6 +4,7 @@ import datetime
 import json
 import binascii
 import bisect
+from copy import deepcopy
 from sqlalchemy.sql import text
 from monetate.common import log
 from monetate.common.row import get_single_value_query
@@ -11,7 +12,8 @@ from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate.common.sqlalchemy_session import CLUSTER_MAX
 import monetate.retailer.models as retailer_models
 import monetate.dio.models as dio_models
-from monetate_recommendations import product_type_filter_expression
+from monetate_recommendations import supported_prefilter_expression
+from supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
 
 DATA_JURISDICTION = 'recs_global'
 SESSION_SHARDS = 8
@@ -120,9 +122,10 @@ reduced_catalog AS (
             WHERE c.dataset_id = :catalog_id
                 AND c.retailer_id = :retailer_id
                 AND c.update_time >= e.cutoff_time
+                {early_filter}
             GROUP BY 1, 2, 3
         )
-        {filter_query}
+        {late_filter}
     )
     WHERE ordinal <= 50
 ),
@@ -153,22 +156,59 @@ WHERE rank <= 1000
 """
 
 
-def parse_product_type_filter(filter_json):
+def parse_supported_filters(filter_json):
     def _filter_product_type(f):
         return f['left']['field'] == 'product_type'
+
+    def _filter_not_product_type(f):
+        return f['left']['field'] != 'product_type'
 
     def _filter_dynamic(f):
         return f['right']['type'] != 'function'
 
+    def _filter_supported_static_filter(f):
+        return f['left']['field'].lower() in SUPPORTED_PREFILTER_FIELDS and f['right']['type'] != 'function'
+
+    # a filter is supported if:
+    #   1. it is in the list of supported prefilter fields AND
+    #   2. the filter type (equal to, starts with, etc) is supported AND
+    #   3. it is a product_type field OR it is a constant (not a function = constant)
+    def _filter_supported_filters(f):
+        return (
+                f['left']['field'].lower() in SUPPORTED_PREFILTER_FIELDS
+        ) and (
+                f['type'] in FILTER_MAP
+        ) and (
+                f['right']['type'] != 'function' or f['left']['field'] == 'product_type'
+        )
+
     filter_dict = json.loads(filter_json)
-    product_type_filters = filter(_filter_product_type, filter_dict['filters'])
+    supported_filters = filter(_filter_supported_filters, filter_dict['filters'])
+    product_type_filters = filter(_filter_product_type, supported_filters)
     static_product_type_filters = filter(_filter_dynamic, product_type_filters)
+    static_supported_filters = filter(_filter_supported_static_filter, supported_filters)
+    static_supported_filters_non_product_type = filter(_filter_not_product_type, static_supported_filters)
 
-    filter_dict['filters'] = static_product_type_filters
-    has_dynamic_filter = filter_dict['type'] == 'and' and \
+    # when the expression is an "or" expression, we can only prefilter if all fields are supported for pre-filtering
+    # AND there is not a mixture of filters on product_type plus other fields. product_type filtering is performed in
+    # one are of the SQL while the filters on other fields are performed in a different area, so we can't 'or' across.
+    has_product_and_non_product = product_type_filters and static_supported_filters_non_product_type
+    has_unsupported_filters = len(supported_filters) != len(filter_dict['filters'])
+    if filter_dict["type"] == "or" and (has_product_and_non_product or has_unsupported_filters):
+        filter_dict['filters'] = []
+        return filter_dict, filter_dict, False
+    # 'or' filters can't be pushed down to the DB. Take for example:
+    # products: [{product_type: a, brand: b}, {product_type: c, brand: d}] with filter on (product_type=a OR brand=d)
+    # if we push down product_type=a, then we end up with only {product_type: a, brand: b} item when both actually match
+    has_dynamic_product_type_filter = filter_dict['type'] == 'and' and \
                                       len(static_product_type_filters) != len(product_type_filters)
-
-    return filter_dict, has_dynamic_filter
+    # the early filter expression is on non-product_type static values
+    early_filter_expr = deepcopy(filter_dict)
+    early_filter_expr['filters'] = static_supported_filters_non_product_type
+    # the late filter expression if for product_type static values
+    late_filter_expr = deepcopy(filter_dict)
+    late_filter_expr['filters'] = static_product_type_filters
+    return early_filter_expr, late_filter_expr, has_dynamic_product_type_filter
 
 
 def create_metric_table(conn, account_ids, lookback, algorithm, query):
@@ -331,9 +371,9 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     result_counts = []
     for account_id in get_recset_account_ids(recset):
         log.log_info('Querying results for recset {}, account {}'.format(recset.id, account_id))
-        product_type_filter, has_dynamic_filter = parse_product_type_filter(recset.filter_json)
-        filter_variables, filter_query = product_type_filter_expression.get_query_and_variables(
-            product_type_filter)
+        early_filter_exp, late_filter_exp, has_dynamic_filter = parse_supported_filters(recset.filter_json)
+        early_filter_sql, late_filter_sql, filter_variables = supported_prefilter_expression.get_query_and_variables(
+            early_filter_exp, late_filter_exp)
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
@@ -351,7 +391,8 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                                                      recset_id=recset.id,
                                                      account_id=account_id,
                                                      lookback=recset.lookback_days,
-                                                     filter_query=filter_query,
+                                                     early_filter=early_filter_sql,
+                                                     late_filter=late_filter_sql,
                                                      market_id=recset.market.id if recset.market else None,
                                                      retailer_scope=recset.retailer_market_scope,
                                                      **unload_sql)),
