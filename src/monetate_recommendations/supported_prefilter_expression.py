@@ -173,7 +173,7 @@ def not_contains_expression(expression):
 
 
 def get_field_and_lower_val(expression):
-    return expression["left"]["field"], [(v.lower() if type(v) == str else v) for v in expression["right"]["value"]]
+    return expression["left"]["field"], [(v.lower() if isinstance(v, basestring) else v) for v in expression["right"]["value"]]
 
 
 def in_expression(expression):
