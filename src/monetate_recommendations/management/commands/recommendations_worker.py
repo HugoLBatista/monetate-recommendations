@@ -31,6 +31,10 @@ class Command(BaseCommand):
                             help=('Max time (seconds) that a worker can run. After this, it will exit instead of '
                                   'getting more work.'),
                             default=DEFAULTS.worker_max_time)
+        parser.add_argument('--use-combined-queue',
+                            type=bool,
+                            help='Use a combined queue to process the recommendations',
+                            default=False)
 
     def handle(self, *args, **options):
         try:

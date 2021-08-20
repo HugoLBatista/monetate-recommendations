@@ -12,12 +12,14 @@ from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate.common.sqlalchemy_session import CLUSTER_MAX
 import monetate.retailer.models as retailer_models
 import monetate.dio.models as dio_models
+from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
 from monetate_recommendations import supported_prefilter_expression
+from monetate_recommendations import supported_prefilter_expression_v2 as filters
 from supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
-
+from precompute_constants import PRECOMPUTE_COLLAB_ALGO
 DATA_JURISDICTION = 'recs_global'
 SESSION_SHARDS = 8
-
+MIN_PURCHASE_THRESHOLD = 3
 GEO_TARGET_COLUMNS = {
     'country': ["country_code"],
     'region': ["country_code", "region"]
@@ -51,6 +53,35 @@ FROM (
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
+"""
+
+SNOWFLAKE_UNLOAD_COLLAB = """
+COPY 
+INTO :target
+FROM (
+    SELECT object_construct(
+    'shard_key', :shard_key,
+    'document', object_construct(
+            'data', (
+                array_agg(object_construct(*))
+                WITHIN GROUP (ORDER BY rank ASC)
+            )
+        ),
+        'sent_time', :sent_time,
+        'account', object_construct(
+            'id', :account_id
+        ),
+        'schema', object_construct(
+            'feed_type', 'RECSET_COLLAB_RECS',
+            'id', :recset_id
+        )
+    )
+    FROM scratch.recset_{account_id}_{recset_id}_ranks
+)
+FILE_FORMAT = (TYPE = JSON, compression='gzip')
+SINGLE=TRUE
+MAX_FILE_SIZE=1000000000
+    
 """
 
 
@@ -154,7 +185,176 @@ SELECT *
 FROM ranked_records
 WHERE rank <= 1000
 """
+PID_RANKS_BY_RECSET = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} 
+AS WITH 
+score_scaling AS (
+        SELECT
+        max(score) AS max_raw_score,
+        min(score) AS min_raw_score,
+        /* avoid division by 0 in edge case of all identical scores */
+        greatest(max_raw_score - min_raw_score, 1) AS raw_score_range,
+        0.01 as min_target,
+        1000 as max_target,
+        max_target - min_target as target_range 
+        FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+)
+    SELECT
+        account_id, 
+        pid1 as lookup_key, 
+        pid2 as product_id, 
+        score,
+        round((score - score_scaling.min_raw_score) / (score_scaling.raw_score_range) /* map raw score to range [0, 1] */
+            * (score_scaling.target_range) /* scale into range [0, max_target] */
+            + score_scaling.min_target, /* shift up by min_target */
+            2) /* round to 2 places (arbitrary; per requirements for search usage) */
+            AS normalized_score
+        FROM (
+            SELECT
+                account_id, pid1, pid2, score,
+                ROW_NUMBER() OVER (PARTITION by account_id, pid1 ORDER BY score DESC, pid2 DESC) AS ordinal
+            FROM  scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+        )
+JOIN score_scaling
+WHERE ordinal <= 10000"""
 
+
+SKU_RANKS_BY_COLLAB_RECSET = """
+CREATE TEMPORARY TABLE scratch.recset_{account_id}_{recset_id}_ranks AS
+WITH 
+reduced_catalog AS (
+        /*
+            Reduce catalog to representative visually distinct items by (image link, color) per item group
+            Limit to at most 50 representative items per item group for later post filtering.
+        */
+        SELECT
+            item_group_id,
+            id
+        FROM (
+            SELECT
+                item_group_id,
+                id,
+                ROW_NUMBER() OVER (PARTITION by item_group_id ORDER BY id DESC) AS ordinal
+            FROM (
+                SELECT
+                    c.item_group_id,
+                    c.image_link,
+                    c.color,
+                    MAX(c.id) AS id
+                FROM product_catalog c
+                JOIN config_dataset_data_expiration e
+                    ON c.dataset_id = e.dataset_id
+                WHERE c.retailer_id = :retailer_id  /* redundant due to dataset_id */
+                    AND c.dataset_id = :catalog_dataset_id
+                    AND c.update_time >= e.cutoff_time
+                GROUP BY 1, 2, 3
+            )
+        )
+        WHERE ordinal <= 50
+    ),
+    sku_algo AS (
+        /* Explode recommended product ids into recommended representative skus */
+        SELECT
+            pid_algo.lookup_key,
+            c.id,
+            pid_algo.score,
+            pid_algo.normalized_score
+        FROM scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
+        JOIN reduced_catalog c
+            ON c.item_group_id = pid_algo.product_id
+    ), 
+    filters as (
+    SELECT *
+       FROM ( 
+         SELECT sa.lookup_key, sa.id, sa.score, sa.normalized_score
+          FROM sku_algo sa
+          JOIN product_catalog context
+            ON sa.lookup_key = context.item_group_id
+          JOIN product_catalog recommendation
+            ON sa.id = recommendation.id
+          {filter}
+          GROUP BY 1, 2, 3, 4
+       )
+    )
+    SELECT
+        lookup_key,
+        id,
+        ordinal AS rank,
+        normalized_score
+    FROM (
+        SELECT
+            lookup_key,
+            id,
+            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC) AS ordinal,
+            normalized_score
+        FROM filters
+    )
+    WHERE rank <= 1000
+    
+"""
+
+GET_LATEST_PURCHASES_PER_MID = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.get_latest_purchase_per_mid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+SELECT
+    account_id,
+    mid_epoch,
+    mid_ts,
+    mid_rnd,
+    product_id,
+    max(fact_time) as fact_time
+FROM m_dedup_purchase_line
+WHERE account_id in (:account_ids)
+    AND fact_time >= :begin_fact_time
+    AND fact_time < :end_fact_time
+GROUP BY 1, 2, 3, 4, 5
+"""
+GET_LATEST_VIEWS_PER_MID = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.get_latest_views_per_mid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+WITH
+device_earliest_product_view AS (
+    SELECT
+        fact_product_view.account_id,
+        mid_epoch,
+        mid_ts,
+        mid_rnd,
+        product_id,
+        min(fact_time) fact_time
+    FROM fact_product_view
+    /* ignore views whose pids are not in catalog so invalid pids coming in on view facts do not get into the results */
+    JOIN config_account ON (fact_product_view.account_id = config_account.account_id)
+    JOIN product_actalog ON (fact_product_view.product_id = product_catalog.item_group_id
+        AND config_account.retailer_id = product_catalog.retailer_id)
+    WHERE fact_product_view.account_id in (:account_ids) AND
+        fact_time >= :begin_fact_time AND
+        fact_time < :end_fact_time
+    GROUP BY 1, 2, 3, 4, 5
+),
+filtered_devices AS (
+    /* Exclude devices viewing more than 1000 distinct products per month */
+    SELECT
+        account_id,
+        mid_epoch,
+        mid_ts,
+        mid_rnd,
+        count(*)
+    FROM device_earliest_product_view
+    GROUP BY 1, 2, 3, 4
+    HAVING count(*) < (:lookback / 30.0 * 1000)
+)
+SELECT
+    p.account_id,
+    p.mid_epoch,
+    p.mid_ts,
+    p.mid_rnd,
+    p.product_id,
+    p.fact_time
+FROM device_earliest_product_view p
+JOIN filtered_devices pf
+    ON pf.account_id = p.account_id
+    AND pf.mid_epoch = p.mid_epoch
+    AND pf.mid_ts = p.mid_ts
+    AND pf.mid_rnd = p.mid_rnd
+"""
 
 def parse_supported_filters(filter_json):
     def _filter_product_type(f):
@@ -211,18 +411,28 @@ def parse_supported_filters(filter_json):
     return early_filter_expr, late_filter_expr, has_dynamic_product_type_filter
 
 
-def create_metric_table(conn, account_ids, lookback, algorithm, query):
-
+def get_fact_time(lookback):
     begin_fact_time = datetime.datetime.today().replace(
         hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=lookback)
     end_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    return begin_fact_time, end_fact_time
+
+
+def create_helper_query(conn, accounts, lookback, query):
+    begin_fact_time, end_fact_time = get_fact_time(lookback)
+    conn.execute(query, account_ids=accounts, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time)
+
+
+def create_metric_table(conn, account_ids, lookback, algorithm, query):
+
+    begin_fact_time, end_fact_time = get_fact_time(lookback)
     begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
         begin_fact_time, end_fact_time)
 
     if algorithm == 'trending':
-        begin_30_day_fact_time = datetime.datetime.today().replace(
-            hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=30)
-        end_30_day_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        begin_30_day_fact_time, end_30_day_fact_time = get_fact_time(30)
+
         begin_30_day_session_time, end_30_day_session_time = sqlalchemy_warehouse.get_session_time_bounds(
             begin_30_day_fact_time, end_30_day_fact_time
         )
@@ -346,6 +556,53 @@ def get_account_ids_for_market_driven_recsets(recset, account_id):
         return [account_id]
 
 
+def get_account_ids_for_market_driven_recommendations(recommendation):
+    if recommendation.market:
+        account_ids = [account.id for account in recommendation.market.accounts.all()]
+        log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids)))
+        return account_ids
+    if recommendation.retailer:
+        account_ids = [account.id for account in recommendation.retailer.account_set.all()]
+        log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids)))
+        return account_ids
+    else:
+        log.log_info('Account scoped recset for account {}'.format(recommendation.account))
+        return [recommendation.account.id]
+
+
+def get_recset_ids(recommendation):
+
+    if recommendation.account:
+        # todo:
+        recsets = RecommendationSet.objects.filter(account=recommendation.account,
+                                                   algorithm=recommendation.algorithm,
+                                                   lookback_days=recommendation.lookback_days,
+                                                   archived=False)
+
+        # retailer_recsets = RecommendationSetDataset.objects.filter(
+        #     account_id=recommendation.account, recommendation_set_id__algorithm=recommendation.algorithm,
+        #     recommendation_set_id__lookback_days=recommendation.lookback_days,
+        #     recommendation_set_id__archived=False).to_list('recommendation_set_id')
+
+        #return recsets + retailer_recsets
+        return recsets[:2]
+
+    elif recommendation.market:
+        recsets = RecommendationSet.objects.filter(market_id=recommendation.market,
+                                                   algorithm=recommendation.algorithm,
+                                                   lookback_days=recommendation.lookback_days,
+                                                   archived=False)
+        return recsets
+    elif recommendation.retailer:
+        recsets = RecommendationSet.objects.filter(retailer_id=recommendation.retailer,
+                                                   algorithm=recommendation.algorithm,
+                                                   lookback_days=recommendation.lookback_days,
+                                                   archived=False)
+        return recsets
+
+    return []
+
+
 def process_noncollab_algorithm(conn, recset, metric_table_query):
     """
     Example JSON shape unloaded to s3:
@@ -409,3 +666,84 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                      sent_time=send_time,
                      target=unload_path)
     return result_counts
+
+def process_collab_algorithm(conn, recommendation, metric_table_query, helper_query):
+    result_counts = []
+    account = recommendation.account.id if recommendation.account else None
+    market = recommendation.market.id if recommendation.market else None
+    retailer = recommendation.retailer.id if recommendation.retailer else None
+    algorithm = recommendation.algorithm
+    lookback_days = recommendation.lookback_days
+    log.log_info('Querying results for recommendation {}'.format(recommendation.id))
+    account_ids = get_account_ids_for_market_driven_recommendations(recommendation)
+
+    #Todo: create a function
+    if algorithm == 'purchase_also_purchase':
+        create_helper_query(conn, account_ids, lookback_days,
+                            text(helper_query.format(account_id=account, market_id=market,
+                                                     retailer_id=retailer, lookback_days=lookback_days)))
+    elif algorithm == 'view_also_view':
+        create_helper_query(conn, account_ids, lookback_days,
+                            text(helper_query.format(account_id=account, market_id=market,
+                                                     retailer_id=retailer, lookback_days=lookback_days)),
+                            lookback=lookback_days)
+
+    # if algorithm == 'purchase_also_purchase' and \
+    #         recommendation.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT):
+    #     conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+    #                                                 retailer_id=retailer, lookback_days=lookback_days)),
+    #                  minimum_count=MIN_PURCHASE_THRESHOLD)
+    #
+    # # runs view_also_view query or purchase_also_purchase if no threshold feature flag
+    # else:
+
+    conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                retailer_id=retailer, lookback_days=lookback_days)), minimum_count=1)
+
+    # TODO: Unload this
+    conn.execute(text(PID_RANKS_BY_RECSET.format(algorithm=algorithm,
+                                                 account_id=account,
+                                                 lookback_days=lookback_days,
+                                                 market_id=market,
+                                                 retailer_id=retailer,
+                                                 )))
+
+
+    recsets = get_recset_ids(recommendation)
+    for recset in recsets:
+        account_ids = RecommendationSetDataset.objects.filter(recommendation_set=recset).values_list('account_id') \
+            if recset.is_retailer_tenanted else [recset.account]
+        for account_id in account_ids:
+            global_filter_json = AccountRecommendationSetting.objects.get(account_id=account_id).filter_json
+            filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json)
+            catalog_id = recset.product_catalog.id if recset.product_catalog else \
+                dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+            conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
+                                                                account_id=account_id.id,
+                                                                lookback_days=recset.lookback_days,
+                                                                filter=filter_sql,
+                                                                market_id=market,
+                                                                retailer_id=retailer,
+                                                                )),
+                         retailer_id=recset.retailer.id,
+                         catalog_dataset_id=catalog_id,
+                         **filter_variables)
+            import ipdb
+            ipdb.set_trace()
+            unload_path, send_time = create_unload_target_path(account_id.id, recset.id)
+            result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
+                                                                                              account_id=account_id.id,
+                                                                                             ))), 0))
+            conn.execute(text(SNOWFLAKE_UNLOAD_COLLAB.format(recset_id=recset.id, account_id=account_id.id)),
+                         shard_key=get_shard_key(account_id.id),
+                         account_id=account_id.id,
+                         recset_id=recset.id,
+                         sent_time=send_time,
+                         target=unload_path)
+
+
+    return result_counts
+
+
+
+

@@ -23,7 +23,7 @@ import traceback
 from django.utils import timezone
 from django.db.models import Q
 from monetate.common import log
-from monetate.recs.models import RecommendationsPrecompute
+from monetate.recs.models import RecommendationsPrecompute, PrecomputeCollab
 import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map
 
@@ -75,6 +75,34 @@ class PrecomputeThread(threading.Thread):
             self.traceback = traceback.format_exc()
 
 
+class PrecomputeCollabThread(threading.Thread):
+
+    def __init__(self, recommendation):
+
+        super(PrecomputeCollabThread, self).__init__()
+        self.recommendation = recommendation
+        self.result = None
+        self.exception = None
+        self.message = None
+        self.traceback = ""
+        self.daemon = True
+        self.connector = None
+
+
+    def run(self):
+        try:
+            algorithm = self.recommendation.algorithm
+            if algorithm in precompute_algo_map.FUNC_MAP.keys():
+                self.result = precompute_algo_map.FUNC_MAP[algorithm]([self.recommendation.recset])[0]
+            else:
+                self.message = 'invalid precompute algorithm {}'.format(algorithm)
+                self.recommendation.status = precompute_constants.STATUS_SKIPPED
+                self.recommendation.save()
+        except Exception as e:
+            self.exception = e
+            self.traceback = traceback.format_exc()
+
+
 class PrecomputeWorker(object):
     """
     Defines a recommendations precompute worker.
@@ -90,7 +118,7 @@ class PrecomputeWorker(object):
 
     def __init__(self, poll_interval=DEFAULTS.poll_interval, max_tries=DEFAULTS.max_tries,
                  heartbeat_interval=DEFAULTS.heartbeat_interval, heartbeat_threshold=DEFAULTS.heartbeat_threshold,
-                 worker_max_time=DEFAULTS.worker_max_time):
+                 worker_max_time=DEFAULTS.worker_max_time, use_combined_queue=False):
         self.poll_interval = poll_interval
         self.max_tries = max_tries
         self.heartbeat_interval = heartbeat_interval
@@ -100,6 +128,7 @@ class PrecomputeWorker(object):
         self.worker_id = '{}-{}-{}'.format(get_hostname(), os.getpid(), int(self.worker_start_time))
         self.recommendation = None
         self.attempts = 0
+        self.use_combined_queue = use_combined_queue
 
     def log(self, msg, level=log.LOG_INFO):
         if self.recommendation is not None:
@@ -170,7 +199,10 @@ class PrecomputeWorker(object):
         recs_pending = Q(status=precompute_constants.STATUS_PENDING)
         recs_retryable = ((Q(heartbeat_time__lt=heartbeat_old_time) | Q(heartbeat_time=None)) &
                           Q(status__in=precompute_constants.RETRYABLE_STATES))
-        return RecommendationsPrecompute.objects.filter(recs_pending | recs_retryable, attempts__lt=self.max_tries)
+        if self.use_combined_queue:
+            return PrecomputeCollab.objects.filter(recs_pending | recs_retryable, attempts__lt=self.max_tries)
+        else:
+            return RecommendationsPrecompute.objects.filter(recs_pending | recs_retryable, attempts__lt=self.max_tries)
 
     def claim_recommendation(self, recs_qs):
         """
@@ -191,9 +223,14 @@ class PrecomputeWorker(object):
         """
         self.recommendation = None
         for rec in recs_qs.order_by('id')[:10]:
-            this_rec_qs = RecommendationsPrecompute.objects.filter(id=rec.id, status=rec.status,
-                                                                   heartbeat_time=rec.heartbeat_time)
-            rows_updated = this_rec_qs.update(status=precompute_constants.STATUS_PROCESSING, heartbeat_time=timezone.now())
+            if self.use_combined_queue:
+                this_rec_qs = PrecomputeCollab.objects.filter(id=rec.id, status=rec.status,
+                                                              heartbeat_time=rec.heartbeat_time)
+            else:
+                this_rec_qs = RecommendationsPrecompute.objects.filter(id=rec.id, status=rec.status,
+                                                                       heartbeat_time=rec.heartbeat_time)
+            rows_updated = this_rec_qs.update(status=precompute_constants.STATUS_PROCESSING,
+                                              heartbeat_time=timezone.now())
             if rows_updated:
                 # I successfully claimed a rec
                 # NB: since update() does not call save() we need to re-query the rec from the DB
@@ -215,8 +252,12 @@ class PrecomputeWorker(object):
         In the main thread, heartbeat against the recs table to keep our claim current.
         Return the completed thread.
         """
-        thread = PrecomputeThread(self.recommendation)
-        thread.start()
+        if self.use_combined_queue:
+            thread = PrecomputeCollabThread(self.recommendation)
+            thread.start()
+        else:
+            thread = PrecomputeThread(self.recommendation)
+            thread.start()
 
         while thread.is_alive():
             self.heartbeat()
