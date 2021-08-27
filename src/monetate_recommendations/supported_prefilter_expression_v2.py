@@ -7,7 +7,7 @@ NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
     'image_link', 'color', 'link', 'adult', 'promotion_id', 'multipack', 'age_group', 'id', 'condition', 'size',
     'shipping', 'shipping_length', 'product_type', 'energy_efficiency_class', 'title', 'gender', 'size_type',
     'shipping_width', 'is_bundle', 'additional_image_link', 'loyalty_points', 'pattern', 'sale_price', 'mobile_link',
-    'brand', 'item_group_id'] #TODO: might as well add availability
+    'brand', 'item_group_id', 'availability']
 SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
 
 SUPPORTED_PREFILTER_FUNCTIONS = ['items_from_base_recommendation_on']
@@ -15,7 +15,7 @@ SUPPORTED_PREFILTER_FUNCTIONS = ['items_from_base_recommendation_on']
 # We don't want to do assertions or validation in this code. That should be done in WebUI.
 # Field names should only be "product_type"
 
-# TODO: why are we checking for supported filters again, since its already supported filters
+
 def collab_boolean(expression):
     # get the supported filters here
     expression_type = expression["type"]
@@ -66,8 +66,6 @@ def contains_expression(expression):
     field = expression["left"]["field"]
     value = expression["right"]["value"]
 
-    if expression['right']['type'] == 'function':
-        return literal_column("recommendation." + field).equals(literal_column("contextitem." + field))
 
     like_statements = []
     for i in value:
@@ -96,6 +94,8 @@ def get_field_and_lower_val(expression):
 def in_expression(expression):
     field, value = get_field_and_lower_val(expression)
     # product type uses == for true equality
+    if expression['right']['type'] == 'function':
+        return literal_column("recommendation." + field).__eq__(literal_column("context." + field))
     return func.lower(literal_column("recommendation." + field)).in_(value)
 
 

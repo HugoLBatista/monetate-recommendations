@@ -23,9 +23,12 @@ import traceback
 from django.utils import timezone
 from django.db.models import Q
 from monetate.common import log
-from monetate.recs.models import RecommendationsPrecompute, PrecomputeCollab
+from monetate.recs.models import RecommendationsPrecompute#, PrecomputeCollab
+from models import PrecomputeCollab
+# TODO remove above once rebiult
 import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map
+import precompute_collab_algo_map as precompute_collab_algo_map
 
 log.configure_script_log('recommendations_worker')
 
@@ -92,8 +95,8 @@ class PrecomputeCollabThread(threading.Thread):
     def run(self):
         try:
             algorithm = self.recommendation.algorithm
-            if algorithm in precompute_algo_map.FUNC_MAP.keys():
-                self.result = precompute_algo_map.FUNC_MAP[algorithm]([self.recommendation.recset])[0]
+            if algorithm in precompute_collab_algo_map.FUNC_MAP.keys():
+                self.result = precompute_collab_algo_map.FUNC_MAP[algorithm]([self.recommendation])[0]
             else:
                 self.message = 'invalid precompute algorithm {}'.format(algorithm)
                 self.recommendation.status = precompute_constants.STATUS_SKIPPED

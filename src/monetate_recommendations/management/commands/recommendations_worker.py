@@ -7,7 +7,8 @@ log.configure_script_log('recommendations_worker')
 
 
 class Command(BaseCommand):
-    worker_kw_args = ('poll_interval', 'max_tries', 'heartbeat_interval', 'heartbeat_threshold', 'worker_max_time')
+    worker_kw_args = ('poll_interval', 'max_tries', 'heartbeat_interval', 'heartbeat_threshold', 'worker_max_time',
+                      'use_combined_queue')
 
     def add_arguments(self, parser):
         parser.add_argument('--poll-interval',
@@ -33,7 +34,9 @@ class Command(BaseCommand):
                             default=DEFAULTS.worker_max_time)
         parser.add_argument('--use-combined-queue',
                             type=bool,
-                            help='Use a combined queue to process the recommendations',
+                            help='Use a combined queue to process the recommendations. '
+                                 'This flag is to only process collaborative algorithms for now, '
+                                 'will eventually expand to non-collaborative',
                             default=False)
 
     def handle(self, *args, **options):
