@@ -1,13 +1,16 @@
 from django.conf import settings
 from django.db.models import Q
+import contextlib
 import os
 import datetime
 import json
 import binascii
 import bisect
+from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 from copy import deepcopy
 from sqlalchemy.sql import text
-from monetate.common import log
+from monetate.common import log, job_timing
 from monetate.common.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate.common.sqlalchemy_session import CLUSTER_MAX
@@ -85,7 +88,7 @@ FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
 """
-SNOWFLAKE_UNLOAD_PID_PID = """"
+SNOWFLAKE_UNLOAD_PID_PID = """
 COPY 
 INTO :target
 FROM (
@@ -94,11 +97,10 @@ FROM (
             'lookup_key', lookup_key,
             'data', (
                 array_agg(object_construct('product_id', product_id,  'normalized_score', normalized_score,'score', score))
-                WITHIN GROUP (ORDER BY rank ASC)
+                WITHIN GROUP (ORDER BY ordinal ASC)
             )
         ),
         'sent_time', :sent_time,
-        ),
         'schema', object_construct(
             'feed_type', 'RECSET_COLLAB_RECS_PID',
             'account_id', :account_id,
@@ -106,7 +108,7 @@ FROM (
             'retailer_id', :retailer_id
         )
     )
-    FROM scratch.recset_{account_id}_{recset_id}_ranks
+    FROM scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
     WHERE ordinal <= 10000
     GROUP BY lookup_key
     
@@ -217,7 +219,7 @@ FROM ranked_records
 WHERE rank <= 1000
 """
 
-PID_RANKS_BY_RECSET = """
+PID_RANKS_BY_COLLAB_RECSET = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} 
 AS WITH 
 score_scaling AS (
@@ -254,7 +256,7 @@ JOIN score_scaling"""
 SKU_RANKS_BY_COLLAB_RECSET = """
 CREATE TEMPORARY TABLE scratch.recset_{account_id}_{recset_id}_ranks AS
 WITH 
-    product_catalog_per_recset as (
+    non_expired_catalog_items as (
     SELECT pc.* FROM product_catalog as pc
     JOIN config_dataset_data_expiration e
     ON pc.dataset_id = e.dataset_id 
@@ -264,14 +266,14 @@ WITH
     sku_algo AS (
         /* Explode recommended product ids into recommended representative skus */
         SELECT
-            pa.lookup_key,
+            pid_algo.lookup_key,
             max(recommendation.id) as id,
-            pa.score,
-            pa.normalized_score
+            pid_algo.score,
+            pid_algo.normalized_score
          FROM scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
-            JOIN product_catalog_per_recset context
+            JOIN non_expired_catalog_items context
             ON pid_algo.lookup_key = context.item_group_id
-          JOIN product_catalog_per_recset recommendation
+          JOIN non_expired_catalog_items recommendation
             ON pid_algo.product_id = recommendation.item_group_id
             {filter}
             GROUP BY 1,3,4
@@ -287,66 +289,42 @@ WITH
             id,
             ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC) AS ordinal,
             normalized_score
-        FROM filters
+        FROM sku_algo
     )
     WHERE rank <= 1000
     
 """
 
-GET_LATEST_PURCHASES_PER_MID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.get_latest_purchase_per_mid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-SELECT
-    account_id,
-    mid_epoch,
-    mid_ts,
-    mid_rnd,
-    product_id,
-    max(fact_time) as fact_time
+GET_LAST_PURCHASE_PER_MID_AND_PID = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, max(fact_time) as fact_time
 FROM m_dedup_purchase_line
 WHERE account_id in (:account_ids)
     AND fact_time >= :begin_fact_time
 GROUP BY 1, 2, 3, 4, 5
 """
 
-GET_LATEST_VIEWS_PER_MID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.get_latest_views_per_mid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-WITH
-device_earliest_product_view AS (
-    SELECT
-        fact_product_view.account_id,
-        mid_epoch,
-        mid_ts,
-        mid_rnd,
-        product_id,
-        min(fact_time) fact_time
+GET_LAST_VIEW_PER_MID_AND_PID = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+WITH device_earliest_product_view AS (
+    SELECT fact_product_view.account_id, mid_epoch, mid_ts, mid_rnd, product_id, min(fact_time) fact_time
     FROM fact_product_view
     /* ignore views whose pids are not in catalog so invalid pids coming in on view facts do not get into the results */
     JOIN config_account ON (fact_product_view.account_id = config_account.account_id)
-    JOIN product_actalog ON (fact_product_view.product_id = product_catalog.item_group_id
+    JOIN product_catalog ON (fact_product_view.product_id = product_catalog.item_group_id
         AND config_account.retailer_id = product_catalog.retailer_id)
     WHERE fact_product_view.account_id in (:account_ids) AND
-        fact_time >= :begin_fact_time AND
+        fact_time >= :begin_fact_time
     GROUP BY 1, 2, 3, 4, 5
 ),
 filtered_devices AS (
     /* Exclude devices viewing more than 1000 distinct products per month */
-    SELECT
-        account_id,
-        mid_epoch,
-        mid_ts,
-        mid_rnd,
-        count(*)
+    SELECT account_id, mid_epoch, mid_ts, mid_rnd, count(*)
     FROM device_earliest_product_view
     GROUP BY 1, 2, 3, 4
     HAVING count(*) < (:lookback / 30.0 * 1000)
 )
-SELECT
-    p.account_id,
-    p.mid_epoch,
-    p.mid_ts,
-    p.mid_rnd,
-    p.product_id,
-    p.fact_time
+SELECT p.account_id, p.mid_epoch, p.mid_ts, p.mid_rnd, p.product_id, p.fact_time
 FROM device_earliest_product_view p
 JOIN filtered_devices fd
     ON fd.account_id = p.account_id
@@ -553,16 +531,18 @@ def create_unload_target_path(account_id, recset_id):
 
 def unload_target_pid_path(account_id, market_id, retailer_id):
     key_id = str(account_id) + str(market_id) + str(retailer_id)
+    recset_group_id = '{account_id}_{market_id}_{market_id}'.format(account_id=account_id, market_id=market_id,
+                                                                    retailer_id=retailer_id)
     stage, vshard_lower, vshard_upper, interval_duration, bucket_time = get_path_info(key_id)
 
     path = '{data_jurisdiction}/{bucket_time:%Y/%m/%d}/{data_jurisdiction}-{bucket_time:%Y%m%dT%H%M%S.000Z}_PT' \
-           '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{key_id}.json.gz' \
+           '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{recset_group_id}.json.gz' \
         .format(data_jurisdiction=DATA_JURISDICTION,
                 bucket_time=bucket_time,
                 interval_duration=interval_duration,
                 vshard_lower=vshard_lower,
                 vshard_upper=vshard_upper,
-                key_id=key_id)
+                recset_group_id=recset_group_id)
 
     return os.path.join(stage, path), bucket_time
 
@@ -581,7 +561,7 @@ def get_account_ids_for_market_driven_recsets(recset, account_id):
         return [account_id]
 
 
-def get_account_ids_for_market_driven_recommendations(recommendation):
+def get_recset_group_account_ids(recommendation):
     if recommendation.market:
         account_ids = [account.id for account in recommendation.market.accounts.all()]
         log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids)))
@@ -595,31 +575,35 @@ def get_account_ids_for_market_driven_recommendations(recommendation):
         return [recommendation.account.id]
 
 
-def get_recset_ids(recommendation):
+def get_recset_ids(recset_group):
 
-    if recommendation.account:
+    if recset_group.account:
+        # recset_group -> queue item
+        # get the recsets that the recset_group referes too with the combination of algo and lookback
+        # for that account
+        # account, algo, and lookback -> Retailer level recset (not market) and account level recset (not market)
         retailer_recsets = RecommendationSetDataset.objects.filter(
-            account_id=recommendation.account, recommendation_set_id__algorithm=recommendation.algorithm,
-            recommendation_set_id__lookback_days=recommendation.lookback_days,
+            account_id=recset_group.account, recommendation_set_id__algorithm=recset_group.algorithm,
+            recommendation_set_id__lookback_days=recset_group.lookback_days,
             recommendation_set_id__archived=False)
 
         recsets = RecommendationSet.objects.filter(
-            (Q(id=retailer_recsets) &
-             Q(account=recommendation.account, algorithm=recommendation.algorithm,
-               lookback_days=recommendation.lookback_days, archived=False)))
-
+            (Q(id=retailer_recsets) |
+             Q(account=recset_group.account, algorithm=recset_group.algorithm,
+               lookback_days=recset_group.lookback_days, archived=False)))
+        recsets = [recs for recs in recsets]
         return recsets
 
-    elif recommendation.market:
-        recsets = RecommendationSet.objects.filter(market_id=recommendation.market,
-                                                   algorithm=recommendation.algorithm,
-                                                   lookback_days=recommendation.lookback_days,
+    elif recset_group.market:
+        recsets = RecommendationSet.objects.filter(market_id=recset_group.market,
+                                                   algorithm=recset_group.algorithm,
+                                                   lookback_days=recset_group.lookback_days,
                                                    archived=False)
         return recsets
-    elif recommendation.retailer:
-        recsets = RecommendationSet.objects.filter(retailer_id=recommendation.retailer,
-                                                   algorithm=recommendation.algorithm,
-                                                   lookback_days=recommendation.lookback_days,
+    elif recset_group.retailer:
+        recsets = RecommendationSet.objects.filter(retailer_id=recset_group.retailer,
+                                                   algorithm=recset_group.algorithm,
+                                                   lookback_days=recset_group.lookback_days,
                                                    archived=False)
         return recsets
 
@@ -690,15 +674,32 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                      target=unload_path)
     return result_counts
 
-def process_collab_algorithm(conn, recommendation, metric_table_query, helper_query):
+
+def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_query, algo_helper_query):
     result_counts = []
-    account = recommendation.account.id if recommendation.account else None
-    market = recommendation.market.id if recommendation.market else None
-    retailer = recommendation.retailer.id if recommendation.retailer else None
-    algorithm = recommendation.algorithm
-    lookback_days = recommendation.lookback_days
-    log.log_info('Querying results for recommendation {}'.format(recommendation.id))
-    account_ids = get_account_ids_for_market_driven_recommendations(recommendation)
+    # Disable pooling so temp tables do not persist on connections returned to pool
+    engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
+    with job_timing.job_timer('precompute_{}_algorithm'.format(algorithm)),\
+            contextlib.closing(engine.connect()) as warehouse_conn:
+        warehouse_conn.execute("use warehouse {}".format(
+            getattr(settings, 'RECS_COLLAB_QUERY_WH', os.environ.get('RECS_COLLAB_QUERY_WH', 'QUERY8_WH'))))
+        for recset_group in recsets_group:
+            if recset_group and recset_group.algorithm == algorithm:
+                log.log_info('processing recset {}'.format(recset_group.id))
+                result_counts.append(
+                    process_collab_algorithm(warehouse_conn, recset_group, algorithm_query, algo_helper_query))
+    log.log_info('ending precompute_{}_algorithm process'.format(algorithm))
+    return result_counts
+
+def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
+    result_counts = []
+    account = recset_group.account.id if recset_group.account else None
+    market = recset_group.market.id if recset_group.market else None
+    retailer = recset_group.retailer.id if recset_group.retailer else None
+    algorithm = recset_group.algorithm
+    lookback_days = recset_group.lookback_days
+    log.log_info('Querying results for recommendation {}'.format(recset_group.id))
+    account_ids = get_recset_group_account_ids(recset_group)
 
     create_helper_query(conn, account_ids, lookback_days, algorithm,
                         text(helper_query.format(account_id=account, market_id=market,
@@ -717,7 +718,7 @@ def process_collab_algorithm(conn, recommendation, metric_table_query, helper_qu
                                                 retailer_id=retailer, lookback_days=lookback_days)), minimum_count=1)
 
 
-    conn.execute(text(PID_RANKS_BY_RECSET.format(algorithm=algorithm,
+    conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm,
                                                  account_id=account,
                                                  lookback_days=lookback_days,
                                                  market_id=market,
@@ -732,7 +733,7 @@ def process_collab_algorithm(conn, recommendation, metric_table_query, helper_qu
                  sent_time=send_time,
                  target=unload_pid_path)
 
-    recsets = get_recset_ids(recommendation)
+    recsets = get_recset_ids(recset_group)
     for recset in recsets:
         account_ids = RecommendationSetDataset.objects.filter(recommendation_set=recset).values_list('account_id') \
             if recset.is_retailer_tenanted else [recset.account]
@@ -751,8 +752,7 @@ def process_collab_algorithm(conn, recommendation, metric_table_query, helper_qu
                          retailer_id=recset.retailer.id,
                          catalog_dataset_id=catalog_id,
                          **filter_variables)
-            import ipdb
-            ipdb.set_trace()
+
             unload_path, send_time = create_unload_target_path(account_id.id, recset.id)
             result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
                                                                                               account_id=account_id.id,

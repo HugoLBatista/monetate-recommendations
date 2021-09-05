@@ -18,8 +18,8 @@ half_scores AS (
         p1.product_id pid1,
         p2.product_id pid2,
         count(*) score 
-    FROM scratch.get_latest_views_per_mid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
-    JOIN scratch.get_latest_views_per_mid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+    FROM scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+    JOIN scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
         ON p1.account_id = p2.account_id
         AND p1.mid_epoch = p2.mid_epoch
         AND p1.mid_ts = p2.mid_ts
@@ -47,19 +47,7 @@ half_scores AS (
 """
 
 
-def precompute_view_also_view_algorithm(recommendations):
-    result_counts = []
-    # Disable pooling so temp tables do not persist on connections returned to pool
-    engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
-    with job_timing.job_timer('precompute_VAV_algorithm'), contextlib.closing(engine.connect()) as warehouse_conn:
-        warehouse_conn.execute("use warehouse {}".format(
-            getattr(settings, 'RECS_QUERY_WH', os.environ.get('RECS_QUERY_WH', 'QUERY2_WH'))))
-
-        for recommendation in recommendations:
-            if recommendation and recommendation.algorithm == 'view_also_view':
-                log.log_info('processing recset {}'.format(recommendation.id))
-                result_counts.append(
-                    precompute_utils.process_collab_algorithm(warehouse_conn, recommendation, VIEW_ALSO_VIEW,
-                                                              precompute_utils.GET_LATEST_VIEWS_PER_MID))
-    log.log_info('ending precompute_VAV_algorithm process')
-    return result_counts
+def precompute_view_also_view_algorithm(recsets_group):
+    return precompute_utils.initialize_process_collab_algorithm(recsets_group, 'view_also_view',
+                                                                VIEW_ALSO_VIEW,
+                                                                precompute_utils.GET_LAST_VIEW_PER_MID_AND_PID)

@@ -23,8 +23,8 @@ import traceback
 from django.utils import timezone
 from django.db.models import Q
 from monetate.common import log
-from monetate.recs.models import RecommendationsPrecompute#, PrecomputeCollab
-from models import PrecomputeCollab
+from monetate.recs.models import RecommendationsPrecompute#, PrecomputeQueue
+from models import PrecomputeQueue
 # TODO remove above once rebiult
 import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map
@@ -78,12 +78,12 @@ class PrecomputeThread(threading.Thread):
             self.traceback = traceback.format_exc()
 
 
-class PrecomputeCollabThread(threading.Thread):
+class PrecomputeCombinedThread(threading.Thread):
 
     def __init__(self, recommendation):
 
-        super(PrecomputeCollabThread, self).__init__()
-        self.recommendation = recommendation
+        super(PrecomputeCombinedThread, self).__init__()
+        self.recset_group = recommendation
         self.result = None
         self.exception = None
         self.message = None
@@ -94,13 +94,13 @@ class PrecomputeCollabThread(threading.Thread):
 
     def run(self):
         try:
-            algorithm = self.recommendation.algorithm
+            algorithm = self.recset_group.algorithm
             if algorithm in precompute_collab_algo_map.FUNC_MAP.keys():
-                self.result = precompute_collab_algo_map.FUNC_MAP[algorithm]([self.recommendation])[0]
+                self.result = precompute_collab_algo_map.FUNC_MAP[algorithm]([self.recset_group])[0]
             else:
                 self.message = 'invalid precompute algorithm {}'.format(algorithm)
-                self.recommendation.status = precompute_constants.STATUS_SKIPPED
-                self.recommendation.save()
+                self.recset_group.status = precompute_constants.STATUS_SKIPPED
+                self.recset_group.save()
         except Exception as e:
             self.exception = e
             self.traceback = traceback.format_exc()
@@ -203,7 +203,7 @@ class PrecomputeWorker(object):
         recs_retryable = ((Q(heartbeat_time__lt=heartbeat_old_time) | Q(heartbeat_time=None)) &
                           Q(status__in=precompute_constants.RETRYABLE_STATES))
         if self.use_combined_queue:
-            return PrecomputeCollab.objects.filter(recs_pending | recs_retryable, attempts__lt=self.max_tries)
+            return PrecomputeQueue.objects.filter(recs_pending | recs_retryable, attempts__lt=self.max_tries)
         else:
             return RecommendationsPrecompute.objects.filter(recs_pending | recs_retryable, attempts__lt=self.max_tries)
 
@@ -227,7 +227,7 @@ class PrecomputeWorker(object):
         self.recommendation = None
         for rec in recs_qs.order_by('id')[:10]:
             if self.use_combined_queue:
-                this_rec_qs = PrecomputeCollab.objects.filter(id=rec.id, status=rec.status,
+                this_rec_qs = PrecomputeQueue.objects.filter(id=rec.id, status=rec.status,
                                                               heartbeat_time=rec.heartbeat_time)
             else:
                 this_rec_qs = RecommendationsPrecompute.objects.filter(id=rec.id, status=rec.status,
@@ -256,7 +256,7 @@ class PrecomputeWorker(object):
         Return the completed thread.
         """
         if self.use_combined_queue:
-            thread = PrecomputeCollabThread(self.recommendation)
+            thread = PrecomputeCombinedThread(self.recommendation)
             thread.start()
         else:
             thread = PrecomputeThread(self.recommendation)
