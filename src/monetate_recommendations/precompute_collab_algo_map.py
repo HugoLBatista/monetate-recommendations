@@ -1,9 +1,8 @@
 from collections import defaultdict
 from monetate_recommendations.precompute_purchase_also_purchase import precompute_purchase_also_purchase_algorithm
 from monetate_recommendations.precompute_view_also_view import precompute_view_also_view_algorithm
-from models import PrecomputeQueue
-#from monetate.recs.models import PrecomputeQueue
-# todo remove above once rebuilt
+from monetate.recs.models import PrecomputeQueue
+
 FUNC_MAP = {
     'purchase_also_purchase': precompute_purchase_also_purchase_algorithm,
     'view_also_view': precompute_view_also_view_algorithm

@@ -23,9 +23,7 @@ import traceback
 from django.utils import timezone
 from django.db.models import Q
 from monetate.common import log
-from monetate.recs.models import RecommendationsPrecompute#, PrecomputeQueue
-from models import PrecomputeQueue
-# TODO remove above once rebiult
+from monetate.recs.models import RecommendationsPrecompute, PrecomputeQueue
 import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map
 import precompute_collab_algo_map as precompute_collab_algo_map

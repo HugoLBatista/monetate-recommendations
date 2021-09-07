@@ -22,6 +22,7 @@ from monetate_recommendations import supported_prefilter_expression_v2 as filter
 from supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
 
 DATA_JURISDICTION = 'recs_global'
+DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
 SESSION_SHARDS = 8
 MIN_PURCHASE_THRESHOLD = 3
 GEO_TARGET_COLUMNS = {
@@ -105,7 +106,9 @@ FROM (
             'feed_type', 'RECSET_COLLAB_RECS_PID',
             'account_id', :account_id,
             'market_id', :market_id,
-            'retailer_id', :retailer_id
+            'retailer_id', :retailer_id,
+            'algorithm', :algorithm,
+            'lookback_days', :lookback_days
         )
     )
     FROM scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
@@ -219,6 +222,8 @@ FROM ranked_records
 WHERE rank <= 1000
 """
 
+# account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
+# example  6814_None_None
 PID_RANKS_BY_COLLAB_RECSET = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} 
 AS WITH 
@@ -294,7 +299,8 @@ WITH
     WHERE rank <= 1000
     
 """
-
+# account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
+# example  6814_None_None
 GET_LAST_PURCHASE_PER_MID_AND_PID = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, max(fact_time) as fact_time
@@ -303,7 +309,8 @@ WHERE account_id in (:account_ids)
     AND fact_time >= :begin_fact_time
 GROUP BY 1, 2, 3, 4, 5
 """
-
+# account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
+# example  6814_None_None
 GET_LAST_VIEW_PER_MID_AND_PID = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 WITH device_earliest_product_view AS (
@@ -537,7 +544,7 @@ def unload_target_pid_path(account_id, market_id, retailer_id):
 
     path = '{data_jurisdiction}/{bucket_time:%Y/%m/%d}/{data_jurisdiction}-{bucket_time:%Y%m%dT%H%M%S.000Z}_PT' \
            '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{recset_group_id}.json.gz' \
-        .format(data_jurisdiction=DATA_JURISDICTION,
+        .format(data_jurisdiction=DATA_JURISDICTION_PID_PID,
                 bucket_time=bucket_time,
                 interval_duration=interval_duration,
                 vshard_lower=vshard_lower,
@@ -704,26 +711,22 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     create_helper_query(conn, account_ids, lookback_days, algorithm,
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)))
-    # we need to rebuild monetate-recs to access the new feature flag
-    # if algorithm == 'purchase_also_purchase' and \
-    #         recommendation.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT):
-    #     conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-    #                                                 retailer_id=retailer, lookback_days=lookback_days)),
-    #                  minimum_count=MIN_PURCHASE_THRESHOLD)
-    #
-    # # runs view_also_view query or purchase_also_purchase if no threshold feature flag
-    # else:
+    if algorithm == 'purchase_also_purchase' and \
+            recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT):
+        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days)),
+                     minimum_count=MIN_PURCHASE_THRESHOLD)
 
-    conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                retailer_id=retailer, lookback_days=lookback_days)), minimum_count=1)
+    # runs view_also_view query or purchase_also_purchase if no threshold feature flag
+    else:
+        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days)),
+                     minimum_count=1)
 
-
-    conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm,
-                                                 account_id=account,
-                                                 lookback_days=lookback_days,
-                                                 market_id=market,
-                                                 retailer_id=retailer,
-                                                 )))
+    conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
+                                                        lookback_days=lookback_days,  market_id=market,
+                                                        retailer_id=retailer,
+                                                        )))
     unload_pid_path, send_time = unload_target_pid_path(account, market, retailer)
     conn.execute(text(SNOWFLAKE_UNLOAD_PID_PID.format(algorithm=algorithm, account_id=account,
                                                       lookback_days=lookback_days, market_id=market,
@@ -731,7 +734,9 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                  account_id=account, market_id=market,
                  retailer_id=retailer,
                  sent_time=send_time,
-                 target=unload_pid_path)
+                 target=unload_pid_path,
+                 algorithm=algorithm,
+                 lookback_days=lookback_days)
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
@@ -756,14 +761,13 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
             unload_path, send_time = create_unload_target_path(account_id.id, recset.id)
             result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
                                                                                               account_id=account_id.id,
-                                                                                             ))), 0))
+                                                                                              ))), 0))
             conn.execute(text(SNOWFLAKE_UNLOAD_COLLAB.format(recset_id=recset.id, account_id=account_id.id)),
                          shard_key=get_shard_key(account_id.id),
                          account_id=account_id.id,
                          recset_id=recset.id,
                          sent_time=send_time,
                          target=unload_path)
-
 
     return result_counts
 

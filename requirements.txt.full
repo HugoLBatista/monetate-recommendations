@@ -128,7 +128,7 @@ monetate-auth==0.1.6
 monetate-bandit==1.8
 monetate-config-model==0.3.2
 monetate-key==0.3
-monetate-recs==0.7
+monetate-recs==0.9
 monetate-segmentation-model==0.0.3
 monetate-tenant==0.6
 msgpack-python==0.4.8

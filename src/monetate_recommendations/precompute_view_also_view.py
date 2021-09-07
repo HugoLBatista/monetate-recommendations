@@ -7,7 +7,7 @@ from monetate.common import job_timing, log
 from monetate_recommendations import precompute_utils
 
 log.configure_script_log('precompute_PAP_algorithm')
-# todo verify performance benefits
+
 VIEW_ALSO_VIEW = """
 CREATE TEMPORARY TABLE scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 WITH
