@@ -7,7 +7,7 @@ from monetate.common import job_timing, log
 from monetate_recommendations import precompute_utils
 
 log.configure_script_log('precompute_PAP_algorithm')
-
+#TODO: update the join on product catalog, we are multiplying our counts with the skus
 PURCHASE_ALSO_PURCHASE = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 
