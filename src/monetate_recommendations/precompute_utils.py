@@ -20,7 +20,6 @@ from monetate.recs.models import RecommendationSet, RecommendationSetDataset, Ac
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
 from supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
-from itertools import chain
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
