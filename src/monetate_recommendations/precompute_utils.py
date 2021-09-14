@@ -20,6 +20,7 @@ from monetate.recs.models import RecommendationSet, RecommendationSetDataset, Ac
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
 from supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
+from itertools import chain
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -275,7 +276,7 @@ WITH
             max(recommendation.id) as id,
             pid_algo.score,
             pid_algo.normalized_score
-         FROM scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
+         FROM scratch.pid_ranks_{algorithm}_{account}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
             JOIN non_expired_catalog_items context
             ON pid_algo.lookup_key = context.item_group_id
           JOIN non_expired_catalog_items recommendation
@@ -589,17 +590,18 @@ def get_recset_ids(recset_group):
         # get the recsets that the recset_group referes too with the combination of algo and lookback
         # for that account
         # account, algo, and lookback -> Retailer level recset (not market) and account level recset (not market)
-        retailer_recsets = RecommendationSetDataset.objects.filter(
+        retailer_recset_ids = RecommendationSetDataset.objects.filter(
             account_id=recset_group.account, recommendation_set_id__algorithm=recset_group.algorithm,
             recommendation_set_id__lookback_days=recset_group.lookback_days,
             recommendation_set_id__archived=False)
+        retailer_recsets = RecommendationSet.objects.filter(
+                id__in=[retailer_recset_id.recommendation_set_id for retailer_recset_id in retailer_recset_ids]
+            )
 
         recsets = RecommendationSet.objects.filter(
-            (Q(id=retailer_recsets) |
-             Q(account=recset_group.account, algorithm=recset_group.algorithm,
+            (Q(account=recset_group.account, algorithm=recset_group.algorithm,
                lookback_days=recset_group.lookback_days, archived=False)))
-        recsets = [recs for recs in recsets]
-        return recsets
+        return retailer_recsets | recsets
 
     elif recset_group.market:
         recsets = RecommendationSet.objects.filter(market_id=recset_group.market,
@@ -711,11 +713,13 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     create_helper_query(conn, account_ids, lookback_days, algorithm,
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)))
-    if algorithm == 'purchase_also_purchase' and \
-            recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT):
-        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days)),
-                     minimum_count=MIN_PURCHASE_THRESHOLD)
+    # TODO: Handle Min. PAP feature flag later on like catalog
+    if recset_group.account:
+        if algorithm == 'purchase_also_purchase' \
+                and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT):
+            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                        retailer_id=retailer, lookback_days=lookback_days)),
+                         minimum_count=MIN_PURCHASE_THRESHOLD)
 
     # runs view_also_view query or purchase_also_purchase if no threshold feature flag
     else:
@@ -750,6 +754,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                 dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,
+                                                                account=account,
                                                                 lookback_days=recset.lookback_days,
                                                                 filter=filter_sql,
                                                                 market_id=market,
