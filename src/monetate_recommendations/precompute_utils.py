@@ -275,7 +275,7 @@ WITH
             max(recommendation.id) as id,
             pid_algo.score,
             pid_algo.normalized_score
-         FROM scratch.pid_ranks_{algorithm}_{account}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
+         FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
             JOIN non_expired_catalog_items context
             ON pid_algo.lookup_key = context.item_group_id
           JOIN non_expired_catalog_items recommendation
@@ -597,10 +597,10 @@ def get_recset_ids(recset_group):
                 id__in=[retailer_recset_id.recommendation_set_id for retailer_recset_id in retailer_recset_ids]
             )
 
-        recsets = RecommendationSet.objects.filter(
+        account_recsets = RecommendationSet.objects.filter(
             (Q(account=recset_group.account, algorithm=recset_group.algorithm,
                lookback_days=recset_group.lookback_days, archived=False)))
-        return retailer_recsets | recsets
+        return retailer_recsets | account_recsets
 
     elif recset_group.market:
         recsets = RecommendationSet.objects.filter(market_id=recset_group.market,
@@ -753,7 +753,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                 dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,
-                                                                account=account,
+                                                                pid_rank_account_id=account,
                                                                 lookback_days=recset.lookback_days,
                                                                 filter=filter_sql,
                                                                 market_id=market,
