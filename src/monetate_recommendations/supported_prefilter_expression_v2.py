@@ -42,8 +42,9 @@ def startswith_expression(expression):
     value = expression["right"]["value"]
 
     if field == 'product_type' and expression['right']['type'] == 'function':
-        return [literal_column("recommendation." + field).contains(literal_column("contextitem." + field)),
-                literal_column("recommendation." + field).startswith(literal_column("contextitem." + field))]
+        statement = [literal_column("recommendation." + field).contains(literal_column("context." + field)),
+                     literal_column("recommendation." + field).startswith(literal_column("context." + field))]
+        return or_(*statement)
 
     like_statements = []
     for i in value:
