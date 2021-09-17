@@ -340,6 +340,29 @@ JOIN filtered_devices fd
     AND fd.mid_rnd = p.mid_rnd
 """
 
+UDF_CONTAINS = """
+CREATE OR REPLACE TEMPORARY FUNCTION udf_contains(c string,t string)
+  RETURNS boolean
+  LANGUAGE JAVASCRIPT
+AS
+'
+  product_type_arr = C.split(",").map(a => a.trim()) 
+  return product_type_arr.some(prod_type => T.includes(prod_type));
+';
+"""
+
+UDF_STARTSWITH = """
+CREATE OR REPLACE TEMPORARY FUNCTION udf_startswith(c string,t string)
+  RETURNS boolean
+  LANGUAGE JAVASCRIPT
+AS
+'
+  product_type_arr = C.split(",").map(a => a.trim()) 
+  return product_type_arr.some(prod_type => T.startsWith(prod_type));
+';
+"""
+
+
 def parse_supported_filters(filter_json):
     def _filter_product_type(f):
         return f['left']['field'] == 'product_type'
@@ -714,6 +737,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)))
     # if pap, account level, and account has min threshold feature flag use min threshold else set min_count to 1
+    # TODO: Handle Min. PAP feature flag later on like catalog
     min_count = MIN_PURCHASE_THRESHOLD \
         if recset_group.account \
            and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) \
@@ -736,6 +760,9 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                  target=unload_pid_path,
                  algorithm=algorithm,
                  lookback_days=lookback_days)
+    # Initializing udf functions for applying product_type dynamic filters
+    conn.execute(text(UDF_CONTAINS))
+    conn.execute(text(UDF_STARTSWITH))
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:

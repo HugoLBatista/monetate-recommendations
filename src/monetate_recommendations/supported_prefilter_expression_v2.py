@@ -35,16 +35,13 @@ def collab_boolean(expression):
 
     return sqlalchemy_type(*converted_filters) if converted_filters else None
 
-
 def startswith_expression(expression):
     # converts a startswith filter JSON into a sql clause
     field = expression["left"]["field"]
     value = expression["right"]["value"]
 
-    if field == 'product_type' and expression['right']['type'] == 'function':
-        statement = [literal_column("recommendation." + field).contains(literal_column("context." + field)),
-                     literal_column("recommendation." + field).startswith(literal_column("context." + field))]
-        return or_(*statement)
+    if field == "product_type" and expression["right"]["type"] == "function":
+        return text("udf_startswith(recommendation.product_type, context.product_type)")
 
     like_statements = []
     for i in value:
@@ -67,6 +64,8 @@ def contains_expression(expression):
     field = expression["left"]["field"]
     value = expression["right"]["value"]
 
+    if field == "product_type" and expression["right"]["type"] == "function":
+        return text("udf_contains(recommendation.product_type, context.product_type)")
 
     like_statements = []
     for i in value:
