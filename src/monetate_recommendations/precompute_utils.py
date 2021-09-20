@@ -664,11 +664,21 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     }
     """
     result_counts = []
+
     for account_id in get_recset_account_ids(recset):
         log.log_info('Querying results for recset {}, account {}'.format(recset.id, account_id))
+        recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
+        if len(recommendation_settings) is 1:
+            global_filter_json = recommendation_settings[0].filter_json
+        else:
+            log.log_debug("Account has no recommendation settings, using default of empty filter_json")
+            global_filter_json = u'{"type": "or", "filters": []}'
         early_filter_exp, late_filter_exp, has_dynamic_filter = parse_supported_filters(recset.filter_json)
+        global_early_filter_exp, global_late_filter_exp, global_has_dynamic_filter = \
+            parse_supported_filters(global_filter_json)
+        has_dynamic_filter = has_dynamic_filter or global_has_dynamic_filter
         early_filter_sql, late_filter_sql, filter_variables = supported_prefilter_expression.get_query_and_variables(
-            early_filter_exp, late_filter_exp)
+            early_filter_exp, late_filter_exp, global_early_filter_exp, global_late_filter_exp)
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
