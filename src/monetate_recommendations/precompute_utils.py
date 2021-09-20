@@ -340,6 +340,29 @@ JOIN filtered_devices fd
     AND fd.mid_rnd = p.mid_rnd
 """
 
+UDF_CONTAINS = """
+CREATE OR REPLACE TEMPORARY FUNCTION udf_contains(c string,t string)
+  RETURNS boolean
+  LANGUAGE JAVASCRIPT
+AS
+'
+  product_type_arr = C.split(",").map(a => a.trim()) 
+  return product_type_arr.some(prod_type => T.includes(prod_type));
+';
+"""
+
+UDF_STARTSWITH = """
+CREATE OR REPLACE TEMPORARY FUNCTION udf_startswith(c string,t string)
+  RETURNS boolean
+  LANGUAGE JAVASCRIPT
+AS
+'
+  product_type_arr = C.split(",").map(a => a.trim()) 
+  return product_type_arr.some(prod_type => T.startsWith(prod_type));
+';
+"""
+
+
 def parse_supported_filters(filter_json):
     def _filter_product_type(f):
         return f['left']['field'] == 'product_type'
@@ -716,25 +739,22 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     retailer = recset_group.retailer.id if recset_group.retailer else None
     algorithm = recset_group.algorithm
     lookback_days = recset_group.lookback_days
-    log.log_info('Querying results for recommendation {}'.format(recset_group.id))
+    log.log_info('Querying results for recset group {}'.format(recset_group.id))
+    log.log_info("Processing algorithm {}, lookback {}".format(algorithm, lookback_days))
     account_ids = get_recset_group_account_ids(recset_group)
 
     create_helper_query(conn, account_ids, lookback_days, algorithm,
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)))
+    # if pap, account level, and account has min threshold feature flag use min threshold else set min_count to 1
     # TODO: Handle Min. PAP feature flag later on like catalog
-    if recset_group.account:
-        if algorithm == 'purchase_also_purchase' \
-                and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT):
-            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                        retailer_id=retailer, lookback_days=lookback_days)),
-                         minimum_count=MIN_PURCHASE_THRESHOLD)
-
-    # runs view_also_view query or purchase_also_purchase if no threshold feature flag
-    else:
-        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days)),
-                     minimum_count=1)
+    min_count = MIN_PURCHASE_THRESHOLD \
+        if recset_group.account \
+           and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) \
+           and algorithm == 'purchase_also_purchase' else 1
+    conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                retailer_id=retailer, lookback_days=lookback_days)),
+                 minimum_count=min_count)
 
     conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                         lookback_days=lookback_days,  market_id=market,
@@ -750,12 +770,16 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                  target=unload_pid_path,
                  algorithm=algorithm,
                  lookback_days=lookback_days)
+    # Initializing udf functions for applying product_type dynamic filters
+    conn.execute(text(UDF_CONTAINS))
+    conn.execute(text(UDF_STARTSWITH))
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
         account_ids = RecommendationSetDataset.objects.filter(recommendation_set=recset).values_list('account_id') \
             if recset.is_retailer_tenanted else [recset.account]
         for account_id in account_ids:
+            log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
             global_filter_json = recommendation_settings[0].filter_json if recommendation_settings else u'{"type":"or","filters":[]}'
             filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json)
@@ -783,6 +807,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                          recset_id=recset.id,
                          sent_time=send_time,
                          target=unload_path)
+            log.log_info("Finished processing recset id {}, account id {}".format(recset.id, account_id))
 
     return result_counts
 
