@@ -32,6 +32,8 @@ class Command(BaseCommand):
 
         updated_recsets = []
         created_recsets = []
+        updated_recsets_group = []
+        precompute_recsets_group = recs_models.PrecomputeQueue.onbjects.get.all()
         for recset in precompute_recsets:
             precompute_recsets_status = recs_models.RecommendationsPrecompute.objects.filter(recset=recset)
             if precompute_recsets_status:
@@ -56,6 +58,20 @@ class Command(BaseCommand):
                     attempts=0,
                 )
                 created_recsets.append(precompute_recset_status.recset.id)
+        for recset_group in precompute_recsets_group:
+            if recset_group:
+                updated = recset_group.filter(
+                    precompute_end_time__lt=stale_time,
+                ).exclude(
+                    status=precompute_constants.STATUS_PENDING
+                ).update(
+                    status=precompute_constants.STATUS_PENDING,
+                    process_complete=False,
+                    products_returned=0,
+                    attempts=0,
+                )
+                if updated:
+                    updated_recsets_group.append(recset_group[0].recset.id)
 
         log.log_info('stale precompute entries updated: {}'.format(updated_recsets))
         log.log_info('new precompute entries created: {}'.format(created_recsets))
