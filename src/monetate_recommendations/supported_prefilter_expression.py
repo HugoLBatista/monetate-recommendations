@@ -230,9 +230,24 @@ def convert(expression):
     return FILTER_MAP[expression_type](expression)
 
 
-def get_query_and_variables(product_type_expression, non_product_type_expression):
+def and_with_convert_without_null(first_expression, second_expression):
+    converted_first_expression = convert(first_expression)
+    converted_second_expression = convert(second_expression)
+    if not converted_first_expression:
+        return converted_second_expression
+    elif not converted_second_expression:
+        return converted_first_expression
+    else:
+        return and_(converted_second_expression, converted_second_expression)
+
+
+def get_query_and_variables(product_type_expression, non_product_type_expression, second_product_type_expression,
+                            second_non_product_type_expression):
     # we collate here to make sure that variable names dont get reused, e.g. "lower_1" showing up twice
-    sql_expression = collate(convert(product_type_expression), convert(non_product_type_expression))
+    sql_expression = collate(and_with_convert_without_null(product_type_expression,
+                                                           second_product_type_expression),
+                             and_with_convert_without_null(non_product_type_expression,
+                                                           second_non_product_type_expression))
     [early_filter, late_filter] = str(sql_expression).split(" COLLATE ")
     params = sql_expression.compile().params if sql_expression is not None else {}
     return ("AND " + early_filter) if early_filter != "NULL" else '', \
