@@ -1,4 +1,4 @@
-from sqlalchemy import and_, literal_column, not_, or_, text, func, collate
+from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, literal
 import json
 # NOTE: availability/availability_date/expiration_date/sale_price_effective_date_begin/sale_price_effective_date_end
 # not included so that such filters make the results update quickly
@@ -46,9 +46,9 @@ def startswith_expression(expression):
     like_statements = []
     for i in value:
         if i is not None:
-            like_statements.append(literal_column("recommendation." + field).startswith(i))
+            like_statements.append(literal_column("recommendation." + field).startswith(literal(i)))
             if field == 'product_type':
-                like_statements.append(literal_column("recommendation." + field).contains(',' + i))
+                like_statements.append(literal_column("recommendation." + field).contains(',' + literal(i)))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
@@ -119,10 +119,10 @@ def direct_sql_expression(expression):
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
     if field == 'product_type' and expression['right']['type'] == 'function':
-        return literal_column("recommendation." + field).equals(literal_column("contextitem." + field))
+        return literal_column("recommendation." + field).equals(literal_column("context." + field))
     # iterate through each item in the list of values and getattr to invoke the right comparison function
-    statements = [getattr(literal_column(field), python_expr_equivalent)(i) for i in value if i is not None]\
-        if type(value) is list else [getattr(literal_column("recommendation." + field), python_expr_equivalent)(value)]
+    statements = [getattr(literal_column("recommendation." + field), python_expr_equivalent)(literal(i)) for i in value if i is not None]\
+        if type(value) is list else [getattr(literal_column("recommendation." + field), python_expr_equivalent)(literal(value))]
     # Multiple statements must be OR'ed together. Empty lists should return always false (1 = 2)
     return or_(*statements) if statements else text("1 = 2")
 
