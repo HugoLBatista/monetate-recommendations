@@ -117,7 +117,7 @@ class RecsTestCase(SnowflakeTestCase):
         recs_models.AccountRecommendationSetting.objects.create(
             account=self.account,
             lookback=lookback,
-            filter_json="",
+            filter_json='{"type": "or", "filters": []}',
         )
 
         with invalidation_context():
