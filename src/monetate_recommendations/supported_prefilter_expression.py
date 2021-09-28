@@ -233,9 +233,9 @@ def convert(expression):
 def and_with_convert_without_null(first_expression, second_expression):
     converted_first_expression = convert(first_expression)
     converted_second_expression = convert(second_expression)
-    if not converted_first_expression:
+    if converted_first_expression is None:
         return converted_second_expression
-    elif not converted_second_expression:
+    elif converted_second_expression is None:
         return converted_first_expression
     else:
         return and_(converted_second_expression, converted_second_expression)
