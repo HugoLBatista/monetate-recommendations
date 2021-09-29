@@ -776,15 +776,19 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
-        account_ids = RecommendationSetDataset.objects.filter(recommendation_set=recset).values_list('account_id') \
+        account_ids = retailer_models.Account.objects.filter(retailer_id=recset.retailer_id) \
             if recset.is_retailer_tenanted else [recset.account]
         for account_id in account_ids:
             log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
             global_filter_json = recommendation_settings[0].filter_json if recommendation_settings else u'{"type":"or","filters":[]}'
             filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json)
-            catalog_id = recset.product_catalog.id if recset.product_catalog else \
-                dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+            try:
+                catalog_id = recset.product_catalog.id if recset.product_catalog else \
+                    dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+            except dio_models.DefaultAccountCatalog.DoesNotExist:
+                log.log_info("Skipping {} with account id {}, no catalog set found".format(account_id, account_id.id))
+                continue
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,
                                                                 pid_rank_account_id=account,
