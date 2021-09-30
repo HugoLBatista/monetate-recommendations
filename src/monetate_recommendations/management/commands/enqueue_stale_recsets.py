@@ -84,6 +84,8 @@ class Command(BaseCommand):
                     attempts=0,
                 )
                 created_recsets.append(precompute_recset_status.recset.id)
+        log.log_info('stale precompute entries updated: {}'.format(updated_recsets))
+        log.log_info('new precompute entries created: {}'.format(created_recsets))
 
         # enqueue precompute collab
         precompute_collab_feature = retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING
@@ -108,8 +110,6 @@ class Command(BaseCommand):
                     self.enqueue_precompute_collab(recset, account_id)
             else:
                 self.enqueue_precompute_collab(recset)
-        log.log_info('stale precompute entries updated: {}'.format(updated_recsets))
-        log.log_info('new precompute entries created: {}'.format(created_recsets))
         # updating entries for precompute combined queue
         updated_recsets_groups = recs_models.PrecomputeQueue.objects.filter(
             precompute_end_time__lt=stale_time,
@@ -122,4 +122,4 @@ class Command(BaseCommand):
             attempts=0,
         )
         if updated_recsets_groups:
-            log.log_info("stale precompute combined queue entries updated {}".format(len(updated_recsets_groups)))
+            log.log_info("stale precompute combined queue entries updated {}".format(updated_recsets_groups))
