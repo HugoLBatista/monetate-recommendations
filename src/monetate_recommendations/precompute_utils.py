@@ -281,7 +281,7 @@ WITH
           JOIN non_expired_catalog_items recommendation
             ON pid_algo.product_id = recommendation.item_group_id
             {filter}
-            GROUP BY 1,3,4
+            GROUP BY 1,3,4,recommendation.color,recommendation.image_link
     )
     SELECT
         lookup_key,
