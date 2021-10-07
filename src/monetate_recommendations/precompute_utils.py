@@ -606,7 +606,6 @@ def get_recset_group_account_ids(recommendation):
 
 
 def get_recset_ids(recset_group):
-
     if recset_group.account:
         # recset_group -> queue item
         # get the recsets that the recset_group referes too with the combination of algo and lookback
@@ -632,7 +631,8 @@ def get_recset_ids(recset_group):
                                                    archived=False)
         return recsets
     elif recset_group.retailer:
-        recsets = RecommendationSet.objects.filter(retailer_id=recset_group.retailer,
+        recsets = RecommendationSet.objects.filter(account_id=None,
+                                                   retailer_id=recset_group.retailer,
                                                    algorithm=recset_group.algorithm,
                                                    lookback_days=recset_group.lookback_days,
                                                    archived=False)
@@ -732,8 +732,29 @@ def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_quer
     log.log_info('ending precompute_{}_algorithm process'.format(algorithm))
     return result_counts
 
+
+def get_recset_account_ids_collab(recset, account):
+    precompute_feature = retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING
+    if recset.is_retailer_tenanted and not recset.is_market_or_retailer_driven_ds:
+        return [account]
+    elif recset.is_retailer_tenanted:
+        return [account for account in
+                retailer_models.Account.objects.filter(retailer_id=recset.retailer_id,
+                                                       archived=False,
+                                                       accountfeature__feature_flag__name=precompute_feature)]
+    else:
+        if recset.account.has_feature(precompute_feature):
+            return [recset.account]
+    return []
+
+
 def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
     result_counts = []
+    if recset_group.account and \
+        not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
+        log.log_info("skipping results for recset group with id {} - does not have collab feature flag"
+                     .format(recset_group.id))
+        return result_counts
     account = recset_group.account.id if recset_group.account else None
     market = recset_group.market.id if recset_group.market else None
     retailer = recset_group.retailer.id if recset_group.retailer else None
@@ -776,8 +797,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
-        account_ids = retailer_models.Account.objects.filter(retailer_id=recset.retailer_id) \
-            if recset.is_retailer_tenanted else [recset.account]
+        account_ids = get_recset_account_ids_collab(recset, recset_group.account)
         for account_id in account_ids:
             log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
