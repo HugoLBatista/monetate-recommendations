@@ -733,15 +733,21 @@ def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_quer
     return result_counts
 
 
-def get_recset_account_ids_collab(recset, account):
+def get_collab_recset_account_ids(recset, queue_account):
+    """
+    For a given recset, return the account/s to process
+    """
     precompute_feature = retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING
+    # if global and not any market options, return account from the queue
     if recset.is_retailer_tenanted and not recset.is_market_or_retailer_driven_ds:
-        return [account]
+        return [queue_account]
+    # elif global get all the accounts for the recset
     elif recset.is_retailer_tenanted:
         return [account for account in
                 retailer_models.Account.objects.filter(retailer_id=recset.retailer_id,
                                                        archived=False,
                                                        accountfeature__feature_flag__name=precompute_feature)]
+    # else account level, return the account from the recset
     else:
         if recset.account.has_feature(precompute_feature):
             return [recset.account]
@@ -750,6 +756,8 @@ def get_recset_account_ids_collab(recset, account):
 
 def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
     result_counts = []
+    # since the queue table currently has accounts that do not have the precompute collab feature flag
+    # we don't want to process these queue entries
     if recset_group.account and \
         not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
         log.log_info("skipping results for recset group with id {} - does not have collab feature flag"
@@ -797,7 +805,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
-        account_ids = get_recset_account_ids_collab(recset, recset_group.account)
+        account_ids = get_collab_recset_account_ids(recset, recset_group.account)
         for account_id in account_ids:
             log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
