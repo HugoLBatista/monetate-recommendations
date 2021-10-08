@@ -26,7 +26,7 @@ class Command(BaseCommand):
         return account
 
     def enqueue_precompute_collab(self, recset, account=None):
-        recs_models.PrecomputeQueue.objects.get_or_create(
+        _, created = recs_models.PrecomputeQueue.objects.get_or_create(
             account=self.get_account(recset, account),
             market=recset.market,
             retailer=recset.retailer if recset.retailer_market_scope else None,
@@ -40,6 +40,7 @@ class Command(BaseCommand):
                 'precompute_enqueue_time': timezone.now()
             }
         )
+        return created
 
     def handle(self, *args, **options):
         hours = options.get('hours', 24)
@@ -102,14 +103,21 @@ class Command(BaseCommand):
             (Q(account__isnull=True) & Q(retailer__in=precompute_collab_retailers))),
             archived=False,
         )
+        created_collab_queue_entries = 0
         for recset in precompute_collab_recsets:
             # if retailer level and not market, need to create a queue entry for each account
             if recset.is_retailer_tenanted and not recset.is_market_or_retailer_driven_ds:
-                account_ids = retailer_models.Account.objects.filter(retailer_id=recset.retailer_id)
+                account_ids = \
+                    retailer_models.Account.objects.filter(retailer_id=recset.retailer_id,
+                                                           accountfeature__feature_flag__name=precompute_collab_feature,
+                                                           archived=False)
                 for account_id in account_ids:
-                    self.enqueue_precompute_collab(recset, account_id)
+                    created = self.enqueue_precompute_collab(recset, account_id)
+                    created_collab_queue_entries += 1 if created else 0
             else:
-                self.enqueue_precompute_collab(recset)
+                created = self.enqueue_precompute_collab(recset)
+                created_collab_queue_entries += 1 if created else 0
+        log.log_info('Number of precompute combined queue entries created: {}'.format(created_collab_queue_entries))
         # updating entries for precompute combined queue
         updated_recsets_groups = recs_models.PrecomputeQueue.objects.filter(
             precompute_end_time__lt=stale_time,
