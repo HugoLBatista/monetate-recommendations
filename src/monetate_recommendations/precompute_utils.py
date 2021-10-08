@@ -559,20 +559,23 @@ def create_unload_target_path(account_id, recset_id):
     return os.path.join(stage, path), bucket_time
 
 
-def unload_target_pid_path(account_id, market_id, retailer_id):
+def unload_target_pid_path(account_id, market_id, retailer_id, algorithm, lookback_days):
     key_id = str(account_id) + str(market_id) + str(retailer_id)
     recset_group_id = '{account_id}_{market_id}_{market_id}'.format(account_id=account_id, market_id=market_id,
                                                                     retailer_id=retailer_id)
     stage, vshard_lower, vshard_upper, interval_duration, bucket_time = get_path_info(key_id)
 
     path = '{data_jurisdiction}/{bucket_time:%Y/%m/%d}/{data_jurisdiction}-{bucket_time:%Y%m%dT%H%M%S.000Z}_PT' \
-           '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{recset_group_id}.json.gz' \
+           '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_' \
+           '{recset_group_id}_{algorithm}_{lookback_days}.json.gz' \
         .format(data_jurisdiction=DATA_JURISDICTION_PID_PID,
                 bucket_time=bucket_time,
                 interval_duration=interval_duration,
                 vshard_lower=vshard_lower,
                 vshard_upper=vshard_upper,
-                recset_group_id=recset_group_id)
+                recset_group_id=recset_group_id,
+                algorithm=algorithm,
+                lookback_days=lookback_days)
 
     return os.path.join(stage, path), bucket_time
 
@@ -591,7 +594,7 @@ def get_account_ids_for_market_driven_recsets(recset, account_id):
         return [account_id]
 
 
-def get_recset_group_account_ids(recommendation):
+def get_account_ids_for_processing(recommendation):
     if recommendation.market:
         account_ids = [account.id for account in recommendation.market.accounts.all()]
         log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids)))
@@ -733,21 +736,22 @@ def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_quer
     return result_counts
 
 
-def get_collab_recset_account_ids(recset, queue_account):
+def get_account_ids_for_catalog_join_and_output(recset, queue_account):
     """
     For a given recset, return the account/s to process
     """
     precompute_feature = retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING
-    # if global and not any market options, return account from the queue
+    # if the recset is retailer & non-market, return the account included in the queue entry
+    # for such recsets, we will have enqueued each account as a separate queue item
     if recset.is_retailer_tenanted and not recset.is_market_or_retailer_driven_ds:
         return [queue_account]
-    # elif global get all the accounts for the recset
+    # for market recsets defined across all accounts, return all accounts
     elif recset.is_retailer_tenanted:
         return [account for account in
                 retailer_models.Account.objects.filter(retailer_id=recset.retailer_id,
                                                        archived=False,
                                                        accountfeature__feature_flag__name=precompute_feature)]
-    # else account level, return the account from the recset
+    # for account level recset, return the account directly from the recset
     else:
         if recset.account.has_feature(precompute_feature):
             return [recset.account]
@@ -770,7 +774,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     lookback_days = recset_group.lookback_days
     log.log_info('Querying results for recset group {}'.format(recset_group.id))
     log.log_info("Processing algorithm {}, lookback {}".format(algorithm, lookback_days))
-    account_ids = get_recset_group_account_ids(recset_group)
+    account_ids = get_account_ids_for_processing(recset_group)
 
     create_helper_query(conn, account_ids, lookback_days, algorithm,
                         text(helper_query.format(account_id=account, market_id=market,
@@ -789,7 +793,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                                                         lookback_days=lookback_days,  market_id=market,
                                                         retailer_id=retailer,
                                                         )))
-    unload_pid_path, send_time = unload_target_pid_path(account, market, retailer)
+    unload_pid_path, send_time = unload_target_pid_path(account, market, retailer, algorithm, lookback_days)
     conn.execute(text(SNOWFLAKE_UNLOAD_PID_PID.format(algorithm=algorithm, account_id=account,
                                                       lookback_days=lookback_days, market_id=market,
                                                       retailer_id=retailer)),
@@ -805,7 +809,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
-        account_ids = get_collab_recset_account_ids(recset, recset_group.account)
+        account_ids = get_account_ids_for_catalog_join_and_output(recset, recset_group.account)
         for account_id in account_ids:
             log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
