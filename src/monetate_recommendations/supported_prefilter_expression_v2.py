@@ -7,7 +7,7 @@ NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
     'image_link', 'color', 'link', 'adult', 'promotion_id', 'multipack', 'age_group', 'id', 'condition', 'size',
     'shipping', 'shipping_length', 'product_type', 'energy_efficiency_class', 'title', 'gender', 'size_type',
     'shipping_width', 'is_bundle', 'additional_image_link', 'loyalty_points', 'pattern', 'sale_price', 'mobile_link',
-    'brand', 'item_group_id', 'availability']
+    'brand', 'item_group_id']
 SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
 
 SUPPORTED_PREFILTER_FUNCTIONS = ['items_from_base_recommendation_on']
