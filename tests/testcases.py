@@ -3,6 +3,7 @@ import mock
 import json
 import os
 
+from django.utils import timezone
 import monetate.common.s3_filereader2 as s3_filereader2
 from monetate.common.warehouse.sqlalchemy_snowflake import get_stage_s3_uri_prefix
 import monetate.recs.models as recs_models
@@ -59,7 +60,14 @@ class RecsTestCase(SnowflakeTestCase):
                 status='dev',
                 description=''
             )
+            retailer_models.AccountFeatureFlag.objects.get_or_create(
+                name=retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING,
+                category=feature_category,
+                status='dev',
+                description=''
+            )
             cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_NONCOLLAB_RECS_PRECOMPUTE)
+            cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING)
         cls.account_id = cls.account.id
         cls.retailer_id = cls.account.retailer.id
         cls.product_catalog_id = warehouse_utils.create_default_catalog_schema(cls.account).schema_id
@@ -111,7 +119,8 @@ class RecsTestCase(SnowflakeTestCase):
 
     @patch_invalidations
     def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
-                       geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None):
+                       geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None,
+                       collab_recs=False):
         # Insert row into config to mock out a lookback setting
         old_rec_setting = recs_models.AccountRecommendationSetting.objects.filter(account=self.account)
         if old_rec_setting:
@@ -138,15 +147,26 @@ class RecsTestCase(SnowflakeTestCase):
                 retailer_market_scope=retailer_market_scope,
                 market=self._setup_market(market),
             )
+            if collab_recs:
+                recset_group = recs_models.PrecomputeQueue.objects.create(
+                    account=self.account,
+                    market=recset.market,
+                    retailer=recset.retailer if recset.retailer_market_scope else None,
+                    algorithm=recset.algorithm,
+                    lookback_days=recset.lookback_days,
+                )
 
         if retailer_market_scope is True or market is True:
             self.assertEqual([self.account_id],  get_account_ids_for_market_driven_recsets(recset, -1))
 
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
         unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
-        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(self.account.id, None, None)
-        s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
 
+        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(self.account.id, None, None,
+                                                                                 algorithm, lookback)
+        s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
+        import ipdb
+        ipdb.set_trace()
         with mock.patch('monetate.common.job_timing.record_job_timing'),\
              mock.patch('contextlib.closing', return_value=self.conn),\
              mock.patch('sqlalchemy.engine.Connection.close'),\
@@ -159,14 +179,11 @@ class RecsTestCase(SnowflakeTestCase):
             if algorithm in NONCOLLAB_FUNC_MAP:
                 NONCOLLAB_FUNC_MAP[algorithm]([recset])
             else:
-                COLLAB_FUNC_MAP[algorithm]([recset])
-
+                COLLAB_FUNC_MAP[algorithm]([recset_group])
         expected_results = expected_result_arr or [expected_result]
 
         actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)]
-        if algorithm in COLLAB_FUNC_MAP:
-            import pydevd_pycharm
-            pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
+        #if algorithm in COLLAB_FUNC_MAP:
         self.assertEqual(len(actual_results), len(expected_results))
         for result_line in range(0, len(expected_results)):
             expected_result = expected_results[result_line]
@@ -218,7 +235,11 @@ class RecsTestCaseWithData(RecsTestCase):
     @patch_invalidations
     def setUpClass(cls):
         super(RecsTestCaseWithData, cls).setUpClass()
-
+        # Todo: Rohit, add proper purchase data and view data in this function
+        # for 30,7,2 day lookback
+        # files that can help
+        #  monetate-recommendaiton test_precompute_purchase_snowflake_test -> setUpClass
+        # monetate-server -> rs_endcap_associated_pids_snowflake_test.py -> class ViewAlsoViewTestCase -> setupClass
         factgen = WarehouseFactsTestGenerator()
         mid_us_pa = factgen.make_monetate_id(cls.account_id)
         mid_us_nj = factgen.make_monetate_id(cls.account_id)

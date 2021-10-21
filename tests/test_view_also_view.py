@@ -13,7 +13,7 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
     def setUpClass(cls):
         super(ViewAlsoViewTestCase, cls).setUpClass()
 
-    def test_30_day_view_also_view(self):
+    def test_30_day_view_also_view_account_level(self):
         filter_json = json.dumps({"type": "and", "filters": []})
         self._run_recs_test(
             algorithm="view_also_view",
@@ -23,5 +23,34 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                 ('TP-00005', [('SKU-00002', 1)]),
                 ('TP-00002', [('SKU-00006', 1), ('SKU-00005', 1)]),
             ],
-            market=True,
+            market=False,
+            collab_recs=True
         )
+
+    def test_30_day_view_also_view_account_level_market(self):
+        pass
+
+    def test_30_day_view_also_view_account_level_retailer_market(self):
+        pass
+
+    def test_30_day_view_also_view_global_level(self):
+        pass
+
+    def test_30_day_view_also_view_global_level_market(self):
+        pass
+
+    def test_30_day_view_also_view_global_level_retauler_market(self):
+        pass
+
+    def test_7_view_also_view_day_account_level(self):
+        pass
+
+    def test_7_day_global_level(self):
+        pass
+
+    def test_30_day_view_also_view_account_level_filters(self):
+        pass
+
+    def test_30_day_view_also_view_account_level_filters(self):
+        pass
+
