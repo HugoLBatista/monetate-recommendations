@@ -165,8 +165,7 @@ class RecsTestCase(SnowflakeTestCase):
         unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(self.account.id, None, None,
                                                                                  algorithm, lookback)
         s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
-        import ipdb
-        ipdb.set_trace()
+
         with mock.patch('monetate.common.job_timing.record_job_timing'),\
              mock.patch('contextlib.closing', return_value=self.conn),\
              mock.patch('sqlalchemy.engine.Connection.close'),\
@@ -252,20 +251,43 @@ class RecsTestCaseWithData(RecsTestCase):
         outside_30_day = datetime.now() - timedelta(days=40)
 
         v = [
+            (mid_us_pa, within_7_day, 'TP-00003'),
+            (mid_us_pa, within_7_day, 'TP-00004'),
             (mid_us_pa, within_7_day, 'TP-00005'),
-            (mid_us_pa, within_7_day, 'TP-00002'),
+            (mid_us_pa, within_30_day, 'TP-00001'),
+            (mid_us_pa, within_30_day, 'TP-00002'),
+            (mid_us_pa, within_30_day, 'TP-00003'),
+            (mid_us_pa, within_30_day, 'TP-00004'),
+            (mid_us_pa, within_30_day, 'TP-00005'),
+
+            (mid_us_nj, within_7_day, 'TP-00002'),
+            (mid_us_nj, within_7_day, 'TP-00003'),
+            (mid_us_nj, within_30_day, 'TP-00001'),
+            (mid_us_nj, within_30_day, 'TP-00002'),
+            # (mid_us_nj, within_30_day, 'TP-00003'),
+            # (mid_us_nj, within_30_day, 'TP-00004'),
+            # (mid_us_nj, within_30_day, 'TP-00005'),
+
+            (mid_ca_on, within_7_day, 'TP-00004'),
+            (mid_ca_on, within_7_day, 'TP-00005'),
+            (mid_ca_on, within_30_day, 'TP-00001'),
+            (mid_ca_on, within_30_day, 'TP-00002'),
+            (mid_ca_on, within_30_day, 'TP-00003'),
+            # (mid_ca_on, within_30_day, 'TP-00004'),
+            # (mid_ca_on, within_30_day, 'TP-00005'),
         ]
         cls.conn.execute(
             """
             INSERT INTO fact_product_view
             (fact_date, account_id, fact_time, mid_epoch, mid_ts, mid_rnd, product_id, qty_in_stock)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
-             mid_us_pa[2], 'TP-00005', qty),
-            (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
-             mid_us_pa[2], 'TP-00002', qty),
-            # TODO: replace above lines with:
-            # *[(e[1].date(), e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[2], qty) for e in v] or the like
+            """,
+            #  (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
+            #  mid_us_pa[2], 'TP-00005', qty),
+            # (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
+            #  mid_us_pa[2], 'TP-00002', qty),
+            # # TODO: replace above lines with:
+            [(e[1].date(), e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[2], qty) for e in v]
         )
 
         p = [
