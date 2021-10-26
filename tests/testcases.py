@@ -164,9 +164,9 @@ class RecsTestCase(SnowflakeTestCase):
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
         unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
 
-        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group.account,
-                                                                                 recset_group.market,
-                                                                                 recset_group.retailer,
+        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group[0].account,
+                                                                                 recset_group[0].market,
+                                                                                 recset_group[0].retailer,
                                                                                  algorithm, lookback)
         s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
 
@@ -182,7 +182,7 @@ class RecsTestCase(SnowflakeTestCase):
             if algorithm in NONCOLLAB_FUNC_MAP:
                 NONCOLLAB_FUNC_MAP[algorithm]([recset])
             else:
-                COLLAB_FUNC_MAP[algorithm]([recset_group])
+                COLLAB_FUNC_MAP[algorithm]([recset_group[0]])
         expected_results = expected_result_arr or [expected_result]
 
         actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)]
@@ -312,8 +312,29 @@ class RecsTestCaseWithData(RecsTestCase):
         )
 
         p = [
-            (mid_us_pa, within_7_day, 'TP-00005', 'SKU-00005', 'purch_1', ),
-            (mid_us_pa, within_7_day, 'TP-00002', 'SKU-00002', 'purch_1', ),
+            (mid_us_pa, within_7_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid_us_pa, within_7_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid_us_pa, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid_us_pa, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid_us_pa, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid_us_pa, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid_us_pa, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid_us_pa, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid_us_nj, within_7_day, 'TP-00002', 'SKU-00005', 'purch_2', ),
+            (mid_us_nj, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid_us_nj, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid_us_nj, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid_us_nj, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid_us_nj, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid_ca_on, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid_ca_on, within_7_day, 'TP-00005', 'SKU-00002', 'purch_5', ),
+            (mid_ca_on, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid_ca_on, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid_ca_on, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid_ca_on, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
         ]
         cls.conn.execute(
             """
