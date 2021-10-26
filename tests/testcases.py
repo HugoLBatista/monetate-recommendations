@@ -120,7 +120,7 @@ class RecsTestCase(SnowflakeTestCase):
     @patch_invalidations
     def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
                        geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None,
-                       collab_recs=False):
+                       global_recset=False):
         # Insert row into config to mock out a lookback setting
         old_rec_setting = recs_models.AccountRecommendationSetting.objects.filter(account=self.account)
         if old_rec_setting:
@@ -134,7 +134,7 @@ class RecsTestCase(SnowflakeTestCase):
         with invalidation_context():
             recset = recs_models.RecommendationSet.objects.create(
                 algorithm=algorithm,
-                account=self.account,
+                account=None if global_recset else self.account,
                 lookback_days=lookback,
                 filter_json=filter_json,
                 retailer=self.account.retailer,
@@ -144,25 +144,29 @@ class RecsTestCase(SnowflakeTestCase):
                 order="algorithm",
                 version=1,
                 product_catalog=dio_models.Schema.objects.get(id=self.product_catalog_id),
-                retailer_market_scope=retailer_market_scope,
+                retailer_market_scope=self._setup_retailer_market(retailer_market_scope, market),
                 market=self._setup_market(market),
             )
-            if collab_recs:
-                recset_group = recs_models.PrecomputeQueue.objects.create(
-                    account=self.account,
-                    market=recset.market,
-                    retailer=recset.retailer if recset.retailer_market_scope else None,
-                    algorithm=recset.algorithm,
-                    lookback_days=recset.lookback_days,
-                )
+
+
+            recset_group = recs_models.PrecomputeQueue.objects.get_or_create(
+                account=self.set_account(recset, self.account) if recset.is_retailer_tenanted
+                else self.set_account(recset),
+                market=recset.market,
+                retailer=recset.retailer if recset.retailer_market_scope else None,
+                algorithm=recset.algorithm,
+                lookback_days=recset.lookback_days,
+            )
 
         if retailer_market_scope is True or market is True:
-            self.assertEqual([self.account_id],  get_account_ids_for_market_driven_recsets(recset, -1))
+            self.assertEqual([self.account_id],  get_account_ids_for_market_driven_recsets(recset, 1))
 
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
         unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
 
-        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(self.account.id, None, None,
+        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group.account,
+                                                                                 recset_group.market,
+                                                                                 recset_group.retailer,
                                                                                  algorithm, lookback)
         s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
 
@@ -227,6 +231,23 @@ class RecsTestCase(SnowflakeTestCase):
             )
             return market
 
+    def _setup_retailer_market(self, retailer_market, market):
+        if retailer_market:
+            return True
+        elif market:
+            return False
+        else:
+            return None
+
+    def set_account(self, recset, account=None):
+        # anytime a recset has a market, account_id should be None
+        if recset.is_market_or_retailer_driven_ds:
+            return None
+        # if not market and not retailer level, return account_id from RecommendationSet table
+        elif not recset.is_retailer_tenanted:
+            return recset.account
+        # if not market but retailer level, return the account_id of current account
+        return account
 
 class RecsTestCaseWithData(RecsTestCase):
 
