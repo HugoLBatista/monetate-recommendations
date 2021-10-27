@@ -191,20 +191,21 @@ class RecsTestCase(SnowflakeTestCase):
                 if len(item) > 3:
                     self.assertEqual(item[3], actual_result['document']['data'][i]['REGION'])
 
-
-    def _setup_market(self, setup):
+    @classmethod
+    def _setup_market(cls, setup):
         if setup is True:
             market = Market.objects.create(
                 name="Market from test",
-                retailer=self.account.retailer
+                retailer=cls.account.retailer
             )
             MarketAccount.objects.create(
-                account=self.account,
+                account=cls.account,
                 market=market
             )
             return market
 
-    def _setup_retailer_market(self, retailer_market, market):
+    @classmethod
+    def _setup_retailer_market(cls, retailer_market, market):
         if retailer_market:
             return True
         elif market:
@@ -212,7 +213,8 @@ class RecsTestCase(SnowflakeTestCase):
         else:
             return None
 
-    def set_account(self, recset, account=None):
+    @classmethod
+    def set_account(cls, recset, account=None):
         # anytime a recset has a market, account_id should be None
         if recset.is_market_or_retailer_driven_ds:
             return None
@@ -320,7 +322,7 @@ class RecsTestCaseWithData(RecsTestCase):
 
 
     @patch_invalidations
-    def _run_collab_recs_test(self, algorithm, lookback, account=None, market=None, retailer=None):
+    def _run_collab_recs_test(self, algorithm, lookback, recsets, expected_results, account=None, market=None, retailer=None):
 
         recset_group = recs_models.PrecomputeQueue.objects.get(
                 account=account,
@@ -330,15 +332,17 @@ class RecsTestCaseWithData(RecsTestCase):
                 lookback_days=lookback,
             )
 
-        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group[0].account,
-                                                                                 recset_group[0].market,
-                                                                                 recset_group[0].retailer,
+        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group.account,
+                                                                                 recset_group.market,
+                                                                                 recset_group.retailer,
                                                                                  algorithm, lookback)
 
         s3_url_pid_pid = get_stage_s3_uri_prefix(self.conn, unload_pid_path)
         # Todo: best way to get the recset_id ?
-        unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
-
+        unload_result = []
+        for recset in recsets:
+            unload_result.append((precompute_utils.create_unload_target_path(self.account.id, recset.id)))
+        print(unload_result)
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
                 mock.patch('contextlib.closing', return_value=self.conn), \
                 mock.patch('sqlalchemy.engine.Connection.close'), \
@@ -347,6 +351,11 @@ class RecsTestCaseWithData(RecsTestCase):
                 mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
                            autospec=True) as mock_pid_suffix:
             mock_pid_suffix.return_value = unload_pid_path, pid_send_time
-            COLLAB_FUNC_MAP[algorithm]([recset_group[0]])
+            mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
+            COLLAB_FUNC_MAP[algorithm]([recset_group])
 
-            # Todo: best way to test expected result
+        # todo create a expected results
+        for recset in recsets:
+            expected_result_arr = expected_results[recset.id]
+            # todo once we have the expected result we can copy similar work from _run_recs_test function
+

@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import datetime, timedelta
-
+from django.db.models import Q
 from . import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCaseWithData
@@ -56,6 +56,13 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                     retailer_market_scope=cls._setup_retailer_market(recset['retailer_market_scope'], recset['market']),
                     market=cls._setup_market(recset['market']),
                 )
+                # for global recset we need to create a row in recommendation_set_dataset table
+                if rec.is_retailer_tenanted and not rec.is_market_or_retailer_driven_ds:
+                    recs_models.RecommendationSetDataset.objects.create(
+                        recommendation_set_id=rec.id,
+                        dataset_id=1,
+                        account_id=cls.account.id
+                    )
                 # add to queue if not already in queue
                 recs_models.PrecomputeQueue.objects.get_or_create(
                     account=cls.set_account(rec, cls.account) if rec.is_retailer_tenanted
@@ -67,19 +74,33 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                 )
 
 
-    def set_account(cls, recset, account=None):
-        # anytime a recset has a market, account_id should be None
-        if recset.is_market_or_retailer_driven_ds:
-            return None
-        # if not market and not retailer level, return account_id from RecommendationSet table
-        elif not recset.is_retailer_tenanted:
-            return recset.account
-        # if not market but retailer level, return the account_id of current account
-        return account
+    # def set_account(cls, recset, account=None):
+    #     # anytime a recset has a market, account_id should be None
+    #     if recset.is_market_or_retailer_driven_ds:
+    #         return None
+    #     # if not market and not retailer level, return account_id from RecommendationSet table
+    #     elif not recset.is_retailer_tenanted:
+    #         return recset.account
+    #     # if not market but retailer level, return the account_id of current account
+    #     return account
 
     def test_30_day_view_also_view_account_level(self):
-
-        self._run_collab_recs_test('view_also_view', 30, account=self.account)
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='view_also_view',
+              account=self.account,
+              lookback_days=30,
+              market=None,
+              retailer_market_scope=None) |
+            Q(algorithm='view_also_view',
+              account=None,
+              lookback_days=30,
+              market=None,
+              retailer_market_scope=None)
+        )
+        print([r.id for r in recsets])
+        # todo create a expected results  for each recset. Expected result should be a dict with key being the recset_id
+        # expected_results = {1:[]}
+        self._run_collab_recs_test('view_also_view', 30, recsets, account=self.account)
 
     def test_7_day_view_also_view_account_level(self):
         pass
