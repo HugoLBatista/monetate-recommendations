@@ -10,7 +10,7 @@ import monetate.recs.models as recs_models
 from monetate.test.testcases import SnowflakeTestCase
 import monetate.test.warehouse_utils as warehouse_utils
 from monetate_recommendations import precompute_utils
-from monetate_recommendations.precompute_algo_map import FUNC_MAP as NONCOLLAB_FUNC_MAP
+from monetate_recommendations.precompute_algo_map import FUNC_MAP
 from monetate_recommendations.precompute_collab_algo_map import FUNC_MAP as COLLAB_FUNC_MAP
 import monetate.dio.models as dio_models
 from monetate.retailer.cache import invalidation_context
@@ -119,8 +119,7 @@ class RecsTestCase(SnowflakeTestCase):
 
     @patch_invalidations
     def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
-                       geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None,
-                       global_recset=False):
+                       geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None):
         # Insert row into config to mock out a lookback setting
         old_rec_setting = recs_models.AccountRecommendationSetting.objects.filter(account=self.account)
         if old_rec_setting:
@@ -134,7 +133,7 @@ class RecsTestCase(SnowflakeTestCase):
         with invalidation_context():
             recset = recs_models.RecommendationSet.objects.create(
                 algorithm=algorithm,
-                account=None if global_recset else self.account,
+                account=self.account,
                 lookback_days=lookback,
                 filter_json=filter_json,
                 retailer=self.account.retailer,
@@ -148,26 +147,12 @@ class RecsTestCase(SnowflakeTestCase):
                 market=self._setup_market(market),
             )
 
-
-            recset_group = recs_models.PrecomputeQueue.objects.get_or_create(
-                account=self.set_account(recset, self.account) if recset.is_retailer_tenanted
-                else self.set_account(recset),
-                market=recset.market,
-                retailer=recset.retailer if recset.retailer_market_scope else None,
-                algorithm=recset.algorithm,
-                lookback_days=recset.lookback_days,
-            )
-
         if retailer_market_scope is True or market is True:
-            self.assertEqual([self.account_id],  get_account_ids_for_market_driven_recsets(recset, 1))
+            self.assertEqual([self.account_id],  get_account_ids_for_market_driven_recsets(recset, -1))
 
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
         unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
 
-        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group[0].account,
-                                                                                 recset_group[0].market,
-                                                                                 recset_group[0].retailer,
-                                                                                 algorithm, lookback)
         s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
 
         with mock.patch('monetate.common.job_timing.record_job_timing'),\
@@ -178,15 +163,12 @@ class RecsTestCase(SnowflakeTestCase):
             mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
                         autospec=True) as mock_pid_suffix:
             mock_suffix.return_value = unload_path, sent_time
-            mock_pid_suffix.return_value = unload_pid_path, pid_send_time
-            if algorithm in NONCOLLAB_FUNC_MAP:
-                NONCOLLAB_FUNC_MAP[algorithm]([recset])
-            else:
-                COLLAB_FUNC_MAP[algorithm]([recset_group[0]])
+
+            FUNC_MAP[algorithm]([recset])
         expected_results = expected_result_arr or [expected_result]
 
         actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)]
-        #if algorithm in COLLAB_FUNC_MAP:
+
         self.assertEqual(len(actual_results), len(expected_results))
         for result_line in range(0, len(expected_results)):
             expected_result = expected_results[result_line]
@@ -195,29 +177,20 @@ class RecsTestCase(SnowflakeTestCase):
                              result['document']['pushdown_filter_hash'] == pushdown_filter_hashes[result_line]][0] \
                 if pushdown_filter_hashes else actual_results[result_line]
             # equal number product records vs expected
-
+            self.assertEqual(len(actual_result['document']['data']), len(expected_result))
             self.assertEqual(actual_result['account']['id'], recset.account.id)
+            self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
             self.assertEqual(actual_result['schema']['id'], recset.id)
-            if algorithm in NONCOLLAB_FUNC_MAP:
-                self.assertEqual(len(actual_result['document']['data']), len(expected_result))
-                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
-            else:
-                self.assertEqual(len(actual_result['document']['data']), len(expected_result[1]))
-                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS')
 
             # records match expected
-            if algorithm in NONCOLLAB_FUNC_MAP:
-                for i, item in enumerate(expected_result):
-                    self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
-                    self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])
-                    if len(item) > 2:
-                        self.assertEqual(item[2], actual_result['document']['data'][i]['COUNTRY_CODE'])
-                    if len(item) > 3:
-                        self.assertEqual(item[3], actual_result['document']['data'][i]['REGION'])
-            else:
-                for i, item in enumerate(expected_result[1]):
-                    self.assertEqual(item[0], actual_result['document']['data'][i]['id'])
-                    self.assertEqual(item[1], actual_result['document']['data'][i]['rank'])
+            for i, item in enumerate(expected_result):
+                self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
+                self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])
+                if len(item) > 2:
+                    self.assertEqual(item[2], actual_result['document']['data'][i]['COUNTRY_CODE'])
+                if len(item) > 3:
+                    self.assertEqual(item[3], actual_result['document']['data'][i]['REGION'])
+
 
     def _setup_market(self, setup):
         if setup is True:
@@ -344,3 +317,36 @@ class RecsTestCaseWithData(RecsTestCase):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, *[(e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[4], 1, e[2], e[3], 1, 'USD', 3.0, 3.0, 3.0) for e in p]
         )
+
+
+    @patch_invalidations
+    def _run_collab_recs_test(self, algorithm, lookback, account=None, market=None, retailer=None):
+
+        recset_group = recs_models.PrecomputeQueue.objects.get(
+                account=account,
+                market=market,
+                retailer=retailer,
+                algorithm=algorithm,
+                lookback_days=lookback,
+            )
+
+        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group[0].account,
+                                                                                 recset_group[0].market,
+                                                                                 recset_group[0].retailer,
+                                                                                 algorithm, lookback)
+
+        s3_url_pid_pid = get_stage_s3_uri_prefix(self.conn, unload_pid_path)
+        # Todo: best way to get the recset_id ?
+        unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
+
+        with mock.patch('monetate.common.job_timing.record_job_timing'), \
+                mock.patch('contextlib.closing', return_value=self.conn), \
+                mock.patch('sqlalchemy.engine.Connection.close'), \
+                mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
+                           autospec=True) as mock_suffix, \
+                mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
+                           autospec=True) as mock_pid_suffix:
+            mock_pid_suffix.return_value = unload_pid_path, pid_send_time
+            COLLAB_FUNC_MAP[algorithm]([recset_group[0]])
+
+            # Todo: best way to test expected result
