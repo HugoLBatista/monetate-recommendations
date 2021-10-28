@@ -354,8 +354,24 @@ class RecsTestCaseWithData(RecsTestCase):
             mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
             COLLAB_FUNC_MAP[algorithm]([recset_group])
 
+        actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
+        print("actual")
+        print(actual_results)
+        
         # todo create a expected results
         for recset in recsets:
             expected_result_arr = expected_results[recset.id]
+            self.assertEqual(len(expected_result_arr), len(actual_results))
             # todo once we have the expected result we can copy similar work from _run_recs_test function
+
+            for i, item in enumerate(expected_result_arr):
+                actual_result = actual_results[i]
+                if recset.account:
+                    self.assertEqual(actual_result['schema']['account_id'], recset.account.id)
+                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS_PID')
+
+                self.assertEqual(len(actual_result['document']['data']), len(item[1]))
+                self.assertEqual(actual_result['document']['lookup_key'], item[0])
+
+
 

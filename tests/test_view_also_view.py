@@ -100,10 +100,63 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
         print([r.id for r in recsets])
         # todo create a expected results  for each recset. Expected result should be a dict with key being the recset_id
         # expected_results = {1:[]}
-        self._run_collab_recs_test('view_also_view', 30, recsets, account=self.account)
+        expected_results = {}
+        for r in recsets:
+            expected_results[r.id] = [
+                ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+                ('TP-00004', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+                ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+                ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00002', 2)]),
+                ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+            ]
+        self._run_collab_recs_test('view_also_view', 30, recsets, expected_results, account=self.account)
+
+    def test_30_day_view_also_view_account_level_market(self):
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='view_also_view',
+              account=self.account,
+              lookback_days=30,
+              market=True,
+              retailer_market_scope=None) |
+            Q(algorithm='view_also_view',
+              account=None,
+              lookback_days=30,
+              market=True,
+              retailer_market_scope=None)
+        )
+        print([r.id for r in recsets])
+        expected_results = {}
+        for r in recsets:
+            expected_results[r.id] = [
+                ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+                ('TP-00004', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+                ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+                ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00002', 2)]),
+                ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+            ]
+        self._run_collab_recs_test('view_also_view', 30, recsets, expected_results, account=self.account)
 
     def test_7_day_view_also_view_account_level(self):
-        pass
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='view_also_view',
+              account=self.account,
+              lookback_days=7,
+              market=None,
+              retailer_market_scope=None) |
+            Q(algorithm='view_also_view',
+              account=None,
+              lookback_days=7,
+              market=None,
+              retailer_market_scope=None)
+        )
+        print([r.id for r in recsets])
+        expected_results = {}
+        for r in recsets:
+            expected_results[r.id] = [
+                ('TP-00005', [('TP-00004', 2)]),
+                ('TP-00004', [('TP-00005', 2)]),
+            ]
+        self._run_collab_recs_test('view_also_view', 7, recsets, expected_results, account=self.account)
 
     """def test_30_day_view_also_view_account_level(self):
         filter_json = json.dumps({"type": "and", "filters": []})
