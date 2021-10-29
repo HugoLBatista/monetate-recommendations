@@ -24,7 +24,7 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                  'market': False, 'retailer_market_scope': False}
         # filters with 30 day lookback
         recs3 = {'filter_json': json.dumps({"type":"and","filters":[
-            {"type":"in","left":{"type":"field","field":"id"},"right":{"type":"value","value":"SKU-00001"}}
+            {"type":"startswith","left":{"type":"field","field":"id"},"right":{"type":"value","value":"SKU-00001"}}
         ]}),'lookback': 30, 'global_recset': False, 'market': False, 'retailer_market_scope': False}
         # account level 7 day lookback
         recs4 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 7, 'global_recset': False,
@@ -178,27 +178,60 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
         self._run_collab_recs_test('view_also_view', 30, recsets, pid_pid_expected_results,
                                    expected_results, market=self.market)
 
-    # def test_7_day_view_also_view_account_level(self):
-    #     recsets = recs_models.RecommendationSet.objects.filter(
-    #         Q(algorithm='view_also_view',
-    #           account=self.account,
-    #           lookback_days=7,
-    #           market=None,
-    #           retailer_market_scope=None) |
-    #         Q(algorithm='view_also_view',
-    #           account=None,
-    #           lookback_days=7,
-    #           market=None,
-    #           retailer_market_scope=None)
-    #     )
-    #     print([r.id for r in recsets])
-    #     expected_results = {}
-    #     for r in recsets:
-    #         expected_results[r.id] = [
-    #             ('TP-00005', [('TP-00004', 2)]),
-    #             ('TP-00004', [('TP-00005', 2)]),
-    #     self._run_collab_recs_test('view_also_view', 7, recsets, expected_results, account=self.account)
-    #         ]
+    def test_7_day_view_also_view_account_level(self):
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='view_also_view',
+              account=self.account,
+              lookback_days=7,
+              market=None,
+              retailer_market_scope=None) |
+            Q(algorithm='view_also_view',
+              account=None,
+              lookback_days=7,
+              market=None,
+              retailer_market_scope=None)
+        )
+        #print([r.id for r in recsets])
+        pid_pid_expected_results = [
+                ('TP-00005', [('TP-00004', 2)]),
+                ('TP-00004', [('TP-00005', 2)]),
+        ]
+        expected_results = {}
+        for r in recsets:
+            expected_results[r.id] = [
+                ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2)]),
+                ('TP-00005', [('TP-00004', 1)]),
+            ]
+        self._run_collab_recs_test('view_also_view', 7, recsets, pid_pid_expected_results, expected_results, account=self.account)
+
+
+    def test_7_day_view_also_view_account_level_market(self):
+        pass
+        # recsets = recs_models.RecommendationSet.objects.filter(
+        #     Q(algorithm='view_also_view',
+        #       account=self.account,
+        #       lookback_days=7,
+        #       market=True,
+        #       retailer_market_scope=None) |
+        #     Q(algorithm='view_also_view',
+        #       account=None,
+        #       lookback_days=7,
+        #       market=True,
+        #       retailer_market_scope=None)
+        # )
+        # print([r.id for r in recsets])
+        # pid_pid_expected_results = [
+        #         ('TP-00005', [('TP-00004', 2)]),
+        #         ('TP-00004', [('TP-00005', 2)]),
+        # ]
+        # expected_results = {}
+        # for r in recsets:
+        #     expected_results[r.id] = [
+        #         ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2)]),
+        #         ('TP-00005', [('TP-00004', 1)]),
+        #     ]
+        # self._run_collab_recs_test('view_also_view', 7, recsets, pid_pid_expected_results, expected_results, account=self.account)
+
 
     """def test_30_day_view_also_view_account_level(self):
         filter_json = json.dumps({"type": "and", "filters": []})
