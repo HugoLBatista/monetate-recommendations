@@ -178,7 +178,7 @@ def get_field_and_lower_val(expression):
 
 def in_expression(expression):
     field, value = get_field_and_lower_val(expression)
-    return func.lower(literal_column(field)).in_(value)
+    return func.lower(literal_column("c." + field)).in_(value)
 
 
 def not_in_expression(expression):
