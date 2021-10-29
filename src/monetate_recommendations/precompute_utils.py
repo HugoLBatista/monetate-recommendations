@@ -763,6 +763,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     result_counts = []
     # since the queue table currently has accounts that do not have the precompute collab feature flag
     # we don't want to process these queue entries
+    # TODO: Add short comments before queries explaining what they do
     if recset_group.account and \
         not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
         log.log_info("skipping results for recset group with id {} - does not have collab feature flag"
@@ -810,6 +811,8 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
 
     recsets = get_recset_ids(recset_group)
     print(len(recsets))
+    import ipdb
+    ipdb.set_trace()
     for recset in recsets:
         account_ids = get_account_ids_for_catalog_join_and_output(recset, recset_group.account)
         for account_id in account_ids:
