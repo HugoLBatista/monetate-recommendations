@@ -365,20 +365,23 @@ class RecsTestCaseWithData(RecsTestCase):
         self.assertEqual(len(actual_results_pid), len(pid_pid_expected_results))
         for result_line in range(0, len(pid_pid_expected_results)):
             expected_result = pid_pid_expected_results[result_line]
-            actual_results_pid = actual_results_pid[result_line]
+            actual_result = actual_results_pid[result_line]
             # same lookup key
-            self.assertEqual(actual_results_pid['document']['lookup_key'], expected_result[0])
+            self.assertEqual(actual_result['document']['lookup_key'], expected_result[0])
             # equal number product records vs expected
-            self.assertEqual(len(actual_results_pid['document']), len(expected_result[1]))
-            self.assertEqual(actual_results_pid['schema']['account_id'], recset_group.account_id)
-            self.assertEqual(actual_results_pid['schema']['market_id'], recset_group.market_id)
-            self.assertEqual(actual_results_pid['schema']['retailer_id'], recset_group.retailer_id)
-            self.assertEqual(actual_results_pid['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
+            self.assertEqual(len(actual_result['document']['data']), len(expected_result[1]))
+            if recset_group.account_id:
+                self.assertEqual(actual_result['schema']['account_id'], recset_group.account_id)
+            if market:
+                self.assertEqual(actual_result['schema']['market_id'], recset_group.market_id)
+            if retailer:
+                self.assertEqual(actual_result['schema']['retailer_id'], recset_group.retailer_id)
+            self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS_PID')
 
             # records match expected
             for i, item in enumerate(expected_result[1]):
-                self.assertEqual(item[0], actual_results_pid['document']['data'][i]['product_id'])
-                self.assertEqual(item[1], actual_results_pid['document']['data'][i]['score'])
+                self.assertEqual(item[0], actual_result['document']['data'][i]['product_id'])
+                self.assertEqual(item[1], actual_result['document']['data'][i]['score'])
         
 
 
@@ -394,11 +397,10 @@ class RecsTestCaseWithData(RecsTestCase):
             for i, item in enumerate(expected_result_arr):
                 actual_result = actual_results[i]
                 if recset.account:
-                    self.assertEqual(actual_result['account_id'], recset.account.id)
+                    self.assertEqual(actual_result['account']['id'], recset.account.id)
                 self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS')
 
                 self.assertEqual(len(actual_result['document']['data']), len(item[1]))
                 self.assertEqual(actual_result['document']['lookup_key'], item[0])
-
 
 
