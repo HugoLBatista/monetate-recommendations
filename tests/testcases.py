@@ -194,15 +194,15 @@ class RecsTestCase(SnowflakeTestCase):
     @classmethod
     def _setup_market(cls, setup):
         if setup is True:
-            market = Market.objects.create(
+            cls.market = Market.objects.create(
                 name="Market from test",
                 retailer=cls.account.retailer
             )
             MarketAccount.objects.create(
                 account=cls.account,
-                market=market
+                market=cls.market
             )
-            return market
+            return cls.market
 
     @classmethod
     def _setup_retailer_market(cls, retailer_market, market):
@@ -322,7 +322,8 @@ class RecsTestCaseWithData(RecsTestCase):
 
 
     @patch_invalidations
-    def _run_collab_recs_test(self, algorithm, lookback, recsets, expected_results, account=None, market=None, retailer=None):
+    def _run_collab_recs_test(self, algorithm, lookback, recsets, pid_pid_expected_results, expected_results,
+                              account=None, market=None, retailer=None):
 
         recset_group = recs_models.PrecomputeQueue.objects.get(
                 account=account,
@@ -340,8 +341,11 @@ class RecsTestCaseWithData(RecsTestCase):
         s3_url_pid_pid = get_stage_s3_uri_prefix(self.conn, unload_pid_path)
         # Todo: best way to get the recset_id ?
         unload_result = []
+        s3_urls = []
         for recset in recsets:
-            unload_result.append((precompute_utils.create_unload_target_path(self.account.id, recset.id)))
+            unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
+            unload_result.append((unload_path, sent_time))
+            s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
         print(unload_result)
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
                 mock.patch('contextlib.closing', return_value=self.conn), \
@@ -354,21 +358,44 @@ class RecsTestCaseWithData(RecsTestCase):
             mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
             COLLAB_FUNC_MAP[algorithm]([recset_group])
 
-        actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
-        print("actual")
-        print(actual_results)
+
+        # test pid - pid (recset group)
+        actual_results_pid = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
+        print(actual_results_pid)
+        self.assertEqual(len(actual_results_pid), len(pid_pid_expected_results))
+        for result_line in range(0, len(pid_pid_expected_results)):
+            expected_result = pid_pid_expected_results[result_line]
+            actual_results_pid = actual_results_pid[result_line]
+            # same lookup key
+            self.assertEqual(actual_results_pid['document']['lookup_key'], expected_result[0])
+            # equal number product records vs expected
+            self.assertEqual(len(actual_results_pid['document']), len(expected_result[1]))
+            self.assertEqual(actual_results_pid['schema']['account_id'], recset_group.account_id)
+            self.assertEqual(actual_results_pid['schema']['market_id'], recset_group.market_id)
+            self.assertEqual(actual_results_pid['schema']['retailer_id'], recset_group.retailer_id)
+            self.assertEqual(actual_results_pid['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
+
+            # records match expected
+            for i, item in enumerate(expected_result[1]):
+                self.assertEqual(item[0], actual_results_pid['document']['data'][i]['product_id'])
+                self.assertEqual(item[1], actual_results_pid['document']['data'][i]['score'])
         
-        # todo create a expected results
-        for recset in recsets:
+
+
+        # test pid-sku (per recset)
+        # todo need to update this (look at the output quert to get an idea -> SNOWFLAKE_UNLOAD)
+        for index, recset in enumerate(recsets):
             expected_result_arr = expected_results[recset.id]
+            actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index])]
+            print('actual_result', actual_results)
             self.assertEqual(len(expected_result_arr), len(actual_results))
             # todo once we have the expected result we can copy similar work from _run_recs_test function
 
             for i, item in enumerate(expected_result_arr):
                 actual_result = actual_results[i]
                 if recset.account:
-                    self.assertEqual(actual_result['schema']['account_id'], recset.account.id)
-                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS_PID')
+                    self.assertEqual(actual_result['account_id'], recset.account.id)
+                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS')
 
                 self.assertEqual(len(actual_result['document']['data']), len(item[1]))
                 self.assertEqual(actual_result['document']['lookup_key'], item[0])
