@@ -339,14 +339,12 @@ class RecsTestCaseWithData(RecsTestCase):
                                                                                  algorithm, lookback)
 
         s3_url_pid_pid = get_stage_s3_uri_prefix(self.conn, unload_pid_path)
-        # Todo: best way to get the recset_id ?
         unload_result = []
         s3_urls = []
         for recset in recsets:
             unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
             unload_result.append((unload_path, sent_time))
             s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
-        print(unload_result)
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
                 mock.patch('contextlib.closing', return_value=self.conn), \
                 mock.patch('sqlalchemy.engine.Connection.close'), \
@@ -361,7 +359,6 @@ class RecsTestCaseWithData(RecsTestCase):
 
         # test pid - pid (recset group)
         actual_results_pid = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
-        print(actual_results_pid)
         self.assertEqual(len(actual_results_pid), len(pid_pid_expected_results))
         for result_line in range(0, len(pid_pid_expected_results)):
             expected_result = pid_pid_expected_results[result_line]
@@ -388,11 +385,18 @@ class RecsTestCaseWithData(RecsTestCase):
         # test pid-sku (per recset)
         # todo need to update this (look at the output quert to get an idea -> SNOWFLAKE_UNLOAD)
         for index, recset in enumerate(recsets):
+
             expected_result_arr = expected_results[recset.id]
             actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index])]
-            print('actual_result', actual_results)
+            print('START\n')
+            print(recset, lookback, algorithm, account, market, retailer)
+            print(expected_result_arr)
+            print('------------------------------------------')
+            print('------------------------------------------')
+            print(actual_results)
+            print('------------------------------------------')
+            print('END\n')
             self.assertEqual(len(expected_result_arr), len(actual_results))
-            # todo once we have the expected result we can copy similar work from _run_recs_test function
 
             for i, item in enumerate(expected_result_arr):
                 actual_result = actual_results[i]
@@ -402,5 +406,9 @@ class RecsTestCaseWithData(RecsTestCase):
 
                 self.assertEqual(len(actual_result['document']['data']), len(item[1]))
                 self.assertEqual(actual_result['document']['lookup_key'], item[0])
+                print(item, actual_result)
+                #todo test that the ranking and the sku is correct
+                for index, sku in item[1]:
+                    pass
 
 

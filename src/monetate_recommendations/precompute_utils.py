@@ -635,7 +635,7 @@ def get_recset_ids(recset_group):
                                                    archived=False)
         return recsets
     elif recset_group.retailer:
-        recsets = RecommendationSet.objects.filter(account_id=None,
+        recsets = RecommendationSet.objects.filter(retailer_market_scope=1,
                                                    retailer_id=recset_group.retailer,
                                                    algorithm=recset_group.algorithm,
                                                    lookback_days=recset_group.lookback_days,
@@ -763,7 +763,6 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     result_counts = []
     # since the queue table currently has accounts that do not have the precompute collab feature flag
     # we don't want to process these queue entries
-    # TODO: Add short comments before queries explaining what they do
     if recset_group.account and \
         not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
         log.log_info("skipping results for recset group with id {} - does not have collab feature flag"
@@ -778,6 +777,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     log.log_info("Processing algorithm {}, lookback {}".format(algorithm, lookback_days))
     account_ids = get_account_ids_for_processing(recset_group)
 
+    # this query creates a temp table with all the purchases or views in given lookback period
     create_helper_query(conn, account_ids, lookback_days, algorithm,
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)))
@@ -787,15 +787,17 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
         if recset_group.account \
            and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) \
            and algorithm == 'purchase_also_purchase' else 1
+    # this query creates a pid pid relation with a score
     conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
                                                 retailer_id=retailer, lookback_days=lookback_days)),
                  minimum_count=min_count)
-
+    # this query add normalized score
     conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                         lookback_days=lookback_days,  market_id=market,
                                                         retailer_id=retailer,
                                                         )))
     unload_pid_path, send_time = unload_target_pid_path(account, market, retailer, algorithm, lookback_days)
+     # writes the pid-pid relation to s3
     conn.execute(text(SNOWFLAKE_UNLOAD_PID_PID.format(algorithm=algorithm, account_id=account,
                                                       lookback_days=lookback_days, market_id=market,
                                                       retailer_id=retailer)),
@@ -810,9 +812,6 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     conn.execute(text(UDF_STARTSWITH))
 
     recsets = get_recset_ids(recset_group)
-    print(len(recsets))
-    import ipdb
-    ipdb.set_trace()
     for recset in recsets:
         account_ids = get_account_ids_for_catalog_join_and_output(recset, recset_group.account)
         for account_id in account_ids:
@@ -826,6 +825,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
             except dio_models.DefaultAccountCatalog.DoesNotExist:
                 log.log_info("Skipping {} with account id {}, no catalog set found".format(account_id, account_id.id))
                 continue
+            # this query explodes the pid to sku to create a pid-sku relation
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,
                                                                 pid_rank_account_id=account,
@@ -842,6 +842,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
             result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
                                                                                               account_id=account_id.id,
                                                                                               ))), 0))
+            # this query write the pid-sku relation to s3
             conn.execute(text(SNOWFLAKE_UNLOAD_COLLAB.format(recset_id=recset.id, account_id=account_id.id)),
                          shard_key=get_shard_key(account_id.id),
                          account_id=account_id.id,
