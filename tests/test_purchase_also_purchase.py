@@ -25,7 +25,7 @@ class PurchaseAlsoPurchase(RecsTestCaseWithData):
                  'market': False, 'retailer_market_scope': False}
         # filters with 30 day lookback
         recs3 = {'filter_json': json.dumps({"type": "and", "filters": [
-            {"type": "in", "left": {"type": "field", "field": "id"}, "right": {"type": "value", "value": "SKU-00001"}}
+            {"type": "startswith", "left": {"type": "field", "field": "id"}, "right": {"type": "value", "value": "SKU-00001"}}
         ]}), 'lookback': 30, 'global_recset': False, 'market': False, 'retailer_market_scope': False}
         # account level 7 day lookback
         recs4 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 7, 'global_recset': False,
@@ -37,7 +37,7 @@ class PurchaseAlsoPurchase(RecsTestCaseWithData):
         recs6 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 30, 'global_recset': False,
                  'market': False, 'retailer_market_scope': True}
 
-        recsets_to_create = [recs1, recs4, recs5, recs6]
+        recsets_to_create = [recs1, recs3, recs4, recs5, recs6]
 
         with invalidation_context():
             for recset in recsets_to_create:
@@ -89,7 +89,7 @@ class PurchaseAlsoPurchase(RecsTestCaseWithData):
               market=None,
               retailer_market_scope=None)
         )
-        print([r.id for r in recsets])
+        # print([r.id for r in recsets])
         pid_pid_expected_results = [
             ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
             ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
@@ -119,7 +119,7 @@ class PurchaseAlsoPurchase(RecsTestCaseWithData):
             ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
         ]
         # expected_results_arr = [recs1_expected_result, recs2_expected_result, recs3_expected_result]
-        expected_results_arr = [recs1_expected_result]
+        expected_results_arr = [recs1_expected_result, recs3_expected_result]
         expected_results = {}
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
@@ -243,6 +243,39 @@ class PurchaseAlsoPurchase(RecsTestCaseWithData):
             ]
         self._run_collab_recs_test('purchase_also_purchase', 7, recsets, pid_pid_expected_results, expected_results,
                                    account=self.account)
+
+    # def test_7_day_purchase_also_purchase_account_level_market(self):
+    #     recsets = recs_models.RecommendationSet.objects.filter(
+    #         Q(algorithm='purchase_also_purchase',
+    #           account=self.account,
+    #           lookback_days=7,
+    #           market=True,
+    #           retailer_market_scope=None) |
+    #         Q(algorithm='purchase_also_purchase',
+    #           account=None,
+    #           lookback_days=7,
+    #           market=True,
+    #           retailer_market_scope=None)
+    #     )
+    #     print([r.id for r in recsets])
+    #     pid_pid_expected_results = [
+    #         ('TP-00001', [('TP-00004', 1), ('TP-00003', 1), ('TP-00002', 1)]),
+    #         ('TP-00004', [('TP-00005', 2), ('TP-00003', 1), ('TP-00002', 1), ('TP-00001', 1)]),
+    #         ('TP-00003', [('TP-00002', 2), ('TP-00004', 1), ('TP-00001', 1)]),
+    #         ('TP-00005', [('TP-00004', 2)]),
+    #         ('TP-00002', [('TP-00003', 2), ('TP-00004', 1), ('TP-00001', 1)]),
+    #     ]
+    #     expected_results = {}
+    #     for r in recsets:
+    #         expected_results[r.id] = [
+    #             ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3)]),
+    #             ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
+    #             ('TP-00003', [('SKU-00002', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+    #             ('TP-00005', [('SKU-00004', 1)]),
+    #             ('TP-00002', [('SKU-00003', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+    #         ]
+    #     self._run_collab_recs_test('purchase_also_purchase', 7, recsets, pid_pid_expected_results, expected_results,
+    #                                market=self.market)
 
     """def test_30_day_purchase_also_purchase_account_level(self):
         filter_json = json.dumps({"type": "and", "filters": []})

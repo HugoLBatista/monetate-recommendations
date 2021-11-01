@@ -388,14 +388,14 @@ class RecsTestCaseWithData(RecsTestCase):
 
             expected_result_arr = expected_results[recset.id]
             actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index])]
-            print('START\n')
-            print(recset, lookback, algorithm, account, market, retailer)
-            print(expected_result_arr)
-            print('------------------------------------------')
-            print('------------------------------------------')
-            print(actual_results)
-            print('------------------------------------------')
-            print('END\n')
+            # print('START\n')
+            # print(recset, lookback, algorithm, account, market, retailer)
+            # print(expected_result_arr)
+            # print('------------------------------------------')
+            # print('------------------------------------------')
+            # print(actual_results)
+            # print('------------------------------------------')
+            # print('END\n')
             self.assertEqual(len(expected_result_arr), len(actual_results))
 
             for i, item in enumerate(expected_result_arr):
@@ -406,7 +406,7 @@ class RecsTestCaseWithData(RecsTestCase):
 
                 self.assertEqual(len(actual_result['document']['data']), len(item[1]))
                 self.assertEqual(actual_result['document']['lookup_key'], item[0])
-                print(item, actual_result)
+                # print(item, actual_result)
                 #todo test that the ranking and the sku is correct
                 data = actual_result['document']['data']
                 for i, row in enumerate(item[1]):
