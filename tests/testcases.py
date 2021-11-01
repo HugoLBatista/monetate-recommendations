@@ -408,7 +408,9 @@ class RecsTestCaseWithData(RecsTestCase):
                 self.assertEqual(actual_result['document']['lookup_key'], item[0])
                 print(item, actual_result)
                 #todo test that the ranking and the sku is correct
-                for index, sku in item[1]:
-                    pass
+                data = actual_result['document']['data']
+                for i, row in enumerate(item[1]):
+                    self.assertEqual(row[0], data[i]['id'])
+                    self.assertEqual(row[1], data[i]['rank'])
 
 
