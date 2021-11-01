@@ -37,7 +37,7 @@ class PurchaseAlsoPurchase(RecsTestCaseWithData):
         recs6 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 30, 'global_recset': False,
                  'market': False, 'retailer_market_scope': True}
 
-        recsets_to_create = [recs1, recs2, recs3, recs4, recs5, recs6]
+        recsets_to_create = [recs1, recs4, recs5, recs6]
 
         with invalidation_context():
             for recset in recsets_to_create:
@@ -91,151 +91,158 @@ class PurchaseAlsoPurchase(RecsTestCaseWithData):
         )
         print([r.id for r in recsets])
         pid_pid_expected_results = [
-            ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-            ('TP-00004', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-            ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+            ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
+            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+            ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
             ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-            ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
+            ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
         ]
         recs1_expected_result = [
-            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-            ('TP-00001', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-            ('TP-00003', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-            ('TP-00005', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-            ('TP-00002', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
+            ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
+            ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
         ]
         recs2_expected_result = [
-            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-            ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-            ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-            ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-            ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+            ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
+            ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
         ]
         recs3_expected_result = [
-            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-            ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-            ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-            ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-            ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+            ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
+            ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
         ]
-        expected_results_arr = [recs1_expected_result, recs2_expected_result, recs3_expected_result]
+        # expected_results_arr = [recs1_expected_result, recs2_expected_result, recs3_expected_result]
+        expected_results_arr = [recs1_expected_result]
         expected_results = {}
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
         self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
                                    expected_results, account=self.account)
 
-    # def test_30_day_purchase_also_purchase_account_level_market(self):
-    #     recsets = recs_models.RecommendationSet.objects.filter(
-    #         Q(algorithm='purchase_also_purchase',
-    #           account=self.account,
-    #           lookback_days=30,
-    #           market=True,
-    #           retailer_market_scope=0) |
-    #         Q(algorithm='purchase_also_purchase',
-    #           account=None,
-    #           lookback_days=30,
-    #           market=True,
-    #           retailer_market_scope=0)
-    #     )
-    #     pid_pid_expected_results = [
-    #         ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-    #         ('TP-00004', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-    #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-    #     ]
-    #     recs5_expected_result = [
-    #         ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #         ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-    #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #     ]
-    #     expected_results_arr = [recs5_expected_result]
+    def test_30_day_purchase_also_purchase_account_level_market(self):
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='purchase_also_purchase',
+              account=self.account,
+              lookback_days=30,
+              market=True,
+              retailer_market_scope=0) |
+            Q(algorithm='purchase_also_purchase',
+              account=None,
+              lookback_days=30,
+              market=True,
+              retailer_market_scope=0)
+        )
+        pid_pid_expected_results = [
+            ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
+            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+            ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+            ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+            ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        ]
+        recs5_expected_result = [
+            ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
+            ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+        ]
+        expected_results_arr = [recs5_expected_result]
 
-    #     expected_results = {}
-    #     for r in recsets:
-    #         expected_results[r.id] = [
-    #             ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #             ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-    #             ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #             ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #             ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #         ]
-    #     for index, r in enumerate(recsets):
-    #         expected_results[r.id] = expected_results_arr[index]
-    #     self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
-    #                                expected_results, market=self.market)
+        expected_results = {}
+        # for r in recsets:
+        #     expected_results[r.id] = [
+        #         ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+        #         ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
+        #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+        #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+        #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+        #     ]
+        for index, r in enumerate(recsets):
+            expected_results[r.id] = expected_results_arr[index]
+        self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
+                                   expected_results, market=self.market)
 
-    # def test_30_day_purchase_also_purchase_account_level_retailer_market(self):
-    #     recsets = recs_models.RecommendationSet.objects.filter(
-    #         Q(algorithm='purchase_also_purchase',
-    #           account=self.account,
-    #           lookback_days=30,
-    #           market=None,
-    #           retailer_market_scope=1) |
-    #         Q(algorithm='purchase_also_purchase',
-    #           account=None,
-    #           lookback_days=30,
-    #           market=None,
-    #           retailer_market_scope=1)
-    #     )
-    #     pid_pid_expected_results = [
-    #         ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-    #         ('TP-00004', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-    #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
-    #     ]
-    #     recs5_expected_result = [
-    #         ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #         ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-    #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #     ]
-    #     expected_results_arr = [recs5_expected_result]
-    #     expected_results = {}
-    #     for r in recsets:
-    #         expected_results[r.id] = [
-    #             ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #             ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-    #             ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #             ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-    #             ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-    #         ]
-    #     for index, r in enumerate(recsets):
-    #         expected_results[r.id] = expected_results_arr[index]
-    #     self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
-    #                                expected_results, account=None, market=None, retailer=1)
+    def test_30_day_purchase_also_purchase_account_level_retailer_market(self):
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='purchase_also_purchase',
+              account=self.account,
+              lookback_days=30,
+              market=None,
+              retailer_market_scope=1) |
+            Q(algorithm='purchase_also_purchase',
+              account=None,
+              lookback_days=30,
+              market=None,
+              retailer_market_scope=1)
+        )
+        pid_pid_expected_results = [
+            ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
+            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+            ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+            ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+            ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        ]
+        recs5_expected_result =[
+            ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+            ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
+            ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+        ]
+        expected_results_arr = [recs5_expected_result]
+        expected_results = {}
+        # for r in recsets:
+        #     expected_results[r.id] = [
+        #         ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+        #         ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
+        #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+        #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+        #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
+        #     ]
+        for index, r in enumerate(recsets):
+            expected_results[r.id] = expected_results_arr[index]
+        self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
+                                   expected_results, account=None, market=None, retailer=1)
 
-    # def test_7_day_purchase_also_purchase_account_level(self):
-    #     recsets = recs_models.RecommendationSet.objects.filter(
-    #         Q(algorithm='purchase_also_purchase',
-    #           account=self.account,
-    #           lookback_days=7,
-    #           market=None,
-    #           retailer_market_scope=None) |
-    #         Q(algorithm='purchase_also_purchase',
-    #           account=None,
-    #           lookback_days=7,
-    #           market=None,
-    #           retailer_market_scope=None)
-    #     )
-    #     # print([r.id for r in recsets])
-    #     pid_pid_expected_results = [
-    #         ('TP-00005', [('TP-00004', 2)]),
-    #         ('TP-00004', [('TP-00005', 2)]),
-    #     ]
-    #     expected_results = {}
-    #     for r in recsets:
-    #         expected_results[r.id] = [
-    #             ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2)]),
-    #             ('TP-00005', [('TP-00004', 1)]),
-    #         ]
-    #     self._run_collab_recs_test('purchase_also_purchase', 7, recsets, pid_pid_expected_results, expected_results,
-    #                                account=self.account)
+    def test_7_day_purchase_also_purchase_account_level(self):
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='purchase_also_purchase',
+              account=self.account,
+              lookback_days=7,
+              market=None,
+              retailer_market_scope=None) |
+            Q(algorithm='purchase_also_purchase',
+              account=None,
+              lookback_days=7,
+              market=None,
+              retailer_market_scope=None)
+        )
+        # print([r.id for r in recsets])
+        pid_pid_expected_results = [
+            ('TP-00001', [('TP-00004', 1), ('TP-00003', 1), ('TP-00002', 1)]),
+            ('TP-00004', [('TP-00005', 2), ('TP-00003', 1), ('TP-00002', 1), ('TP-00001', 1)]),
+            ('TP-00003', [('TP-00002', 2), ('TP-00004', 1), ('TP-00001', 1)]),
+            ('TP-00005', [('TP-00004', 2)]),
+            ('TP-00002', [('TP-00003', 2), ('TP-00004', 1), ('TP-00001', 1)]),
+        ]
+        expected_results = {}
+        for r in recsets:
+            expected_results[r.id] = [
+                ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3)]),
+                ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
+                ('TP-00003', [('SKU-00002', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+                ('TP-00005', [('SKU-00004', 1)]),
+                ('TP-00002', [('SKU-00003', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+            ]
+        self._run_collab_recs_test('purchase_also_purchase', 7, recsets, pid_pid_expected_results, expected_results,
+                                   account=self.account)
 
     """def test_30_day_purchase_also_purchase_account_level(self):
         filter_json = json.dumps({"type": "and", "filters": []})
