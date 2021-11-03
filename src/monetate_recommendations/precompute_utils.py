@@ -207,7 +207,7 @@ sku_algo AS (
     ON c.item_group_id = pid_algo.product_id
 ),
 filtered_scored_records AS (
-    SELECT pc.*, sa.score
+    SELECT pc.id, pc.product_type, sa.score
       {geo_columns}
     FROM product_catalog as pc
     JOIN sku_algo as sa
