@@ -24,8 +24,8 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                  'market': False, 'retailer_market_scope': False}
         # filters with 30 day lookback
         recs3 = {'filter_json': json.dumps({"type":"and","filters":[
-            {"type":"startswith","left":{"type":"field","field":"id"},"right":{"type":"value","value":"SKU-00001"}}
-        ]}),'lookback': 30, 'global_recset': False, 'market': False, 'retailer_market_scope': False}
+            {"type":"startswith","left":{"type":"field","field":"id"},"right":{"type":"value","value": ["SKU-00001"]}}
+        ]}), 'lookback': 30, 'global_recset': False, 'market': False, 'retailer_market_scope': False}
         # account level 7 day lookback
         recs4 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 7, 'global_recset': False,
                  'market': False, 'retailer_market_scope': False}
@@ -56,11 +56,13 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                     retailer_market_scope=cls._setup_retailer_market(recset['retailer_market_scope'], recset['market']),
                     market=cls._setup_market(recset['market']),
                 )
-                # for global recset we need to create a row in recommendation_set_dataset table
+                # for global recset which is not market we need to create a row in recommendation_set_dataset table
                 if rec.is_retailer_tenanted and not rec.is_market_or_retailer_driven_ds:
+                    recset_dataset = dio_models.Schema.objects.create(retailer=cls.account.retailer,
+                                                                      name='view_also_view')
                     recs_models.RecommendationSetDataset.objects.create(
                         recommendation_set_id=rec.id,
-                        dataset_id=1,
+                        dataset_id=recset_dataset.id,
                         account_id=cls.account.id
                     )
                 # add to queue if not already in queue
@@ -124,11 +126,10 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
             ('TP-00002', [('SKU-00003', 1), ('SKU-00001', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00004',5)]),
         ]
         recs3_expected_result = [
-            ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
-            ('TP-00001', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00004', 5)]),
-            ('TP-00003', [('SKU-00002', 1), ('SKU-00001', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00004', 5)]),
-            ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
-            ('TP-00002', [('SKU-00003', 1), ('SKU-00001', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00004',5)]),
+            ('TP-00002', [('SKU-00001', 1)]),
+            ('TP-00005', [('SKU-00001', 1)]),
+            ('TP-00003', [('SKU-00001', 1)]),
+            ('TP-00004', [('SKU-00001', 1)]),
         ]
         expected_results_arr = [recs1_expected_result, recs2_expected_result, recs3_expected_result]
         expected_results = {}
@@ -142,13 +143,13 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
             Q(algorithm='view_also_view',
               account=self.account,
               lookback_days=30,
-              market=True,
-              retailer_market_scope=0) |
+              market=self.market,
+              retailer_market_scope=False) |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
-              market=True,
-              retailer_market_scope=0)
+              market=self.market,
+              retailer_market_scope=False)
         )
         pid_pid_expected_results = [
             ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
@@ -186,12 +187,12 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=1) |
+              retailer_market_scope=True) |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=1)
+              retailer_market_scope=True)
         )
         pid_pid_expected_results = [
             ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
@@ -220,7 +221,7 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
         self._run_collab_recs_test('view_also_view', 30, recsets, pid_pid_expected_results,
-                                   expected_results, account=None, market=None, retailer=1)
+                                   expected_results, account=None, market=None, retailer=self.retailer_id)
 
     def test_7_day_view_also_view_account_level(self):
         recsets = recs_models.RecommendationSet.objects.filter(
