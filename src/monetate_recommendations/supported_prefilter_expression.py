@@ -238,7 +238,7 @@ def and_with_convert_without_null(first_expression, second_expression):
     elif converted_second_expression is None:
         return converted_first_expression
     else:
-        return and_(converted_second_expression, converted_second_expression)
+        return and_(converted_first_expression, converted_second_expression)
 
 
 def get_query_and_variables(product_type_expression, non_product_type_expression, second_product_type_expression,
