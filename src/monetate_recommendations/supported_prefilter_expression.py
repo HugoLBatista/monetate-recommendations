@@ -1,4 +1,4 @@
-from sqlalchemy import and_, literal_column, not_, or_, text, func, collate
+from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, literal
 
 # NOTE: availability/availability_date/expiration_date/sale_price_effective_date_begin/sale_price_effective_date_end
 # not included so that such filters make the results update quickly
