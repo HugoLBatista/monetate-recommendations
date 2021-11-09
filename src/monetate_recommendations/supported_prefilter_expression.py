@@ -80,7 +80,10 @@ def startswith_expression(expression):
         if i is not None:
             like_statements.append(literal_column(field).startswith(i))
             if field == 'product_type':
+                like_statements.append(literal_column(field).startswith(i))
                 like_statements.append(literal_column(field).contains(',' + i))
+            else:
+                like_statements.append(literal_column("c." + field).startswith(i))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
@@ -155,7 +158,10 @@ def contains_expression(expression):
     like_statements = []
     for i in value:
         if i is not None:
-            like_statements.append(func.lower(literal_column(field)).contains(i.lower()))
+            if field == "product_type":
+                like_statements.append(func.lower(literal_column(field)).contains(i.lower()))
+            else:
+                like_statements.append(func.lower(literal_column("c." + field)).contains(i.lower()))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
@@ -178,7 +184,10 @@ def get_field_and_lower_val(expression):
 
 def in_expression(expression):
     field, value = get_field_and_lower_val(expression)
-    return func.lower(literal_column("c." + field)).in_(value)
+    if field == "product_type":
+        return func.lower(literal_column(field)).in_(value)
+    else:
+        return func.lower(literal_column("c." + field)).in_(value)
 
 
 def not_in_expression(expression):
@@ -201,8 +210,12 @@ def direct_sql_expression(expression):
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
     # iterate through each item in the list of values and getattr to invoke the right comparison function
-    statements = [getattr(literal_column(field), python_expr_equivalent)(i) for i in value if i is not None]\
-        if type(value) is list else [getattr(literal_column(field), python_expr_equivalent)(value)]
+    if field == "product_type":
+        statements = [getattr(literal_column(field), python_expr_equivalent)(i) for i in value if i is not None]\
+            if type(value) is list else [getattr(literal_column(field), python_expr_equivalent)(value)]
+    else:
+        statements = [getattr(literal_column("c." + field), python_expr_equivalent)(literal(i)) for i in value if i is not None] \
+            if type(value) is list else [getattr(literal_column("c." + field), python_expr_equivalent)(literal(value))]
     # Multiple statements must be OR'ed together. Empty lists should return always false (1 = 2)
     return or_(*statements) if statements else text("1 = 2")
 
@@ -241,13 +254,14 @@ def and_with_convert_without_null(first_expression, second_expression):
         return and_(converted_first_expression, converted_second_expression)
 
 
-def get_query_and_variables(product_type_expression, non_product_type_expression, second_product_type_expression,
-                            second_non_product_type_expression):
+# non_product_type expressions are the early filter, product_type expressions are the late filter
+def get_query_and_variables(non_product_type_expression, product_type_expression, second_non_product_type_expression,
+                            second_product_type_expression):
     # we collate here to make sure that variable names dont get reused, e.g. "lower_1" showing up twice
-    sql_expression = collate(and_with_convert_without_null(product_type_expression,
-                                                           second_product_type_expression),
-                             and_with_convert_without_null(non_product_type_expression,
-                                                           second_non_product_type_expression))
+    sql_expression = collate(and_with_convert_without_null(non_product_type_expression,
+                                                           second_non_product_type_expression),
+                             and_with_convert_without_null(product_type_expression,
+                                                           second_product_type_expression))
     [early_filter, late_filter] = str(sql_expression).split(" COLLATE ")
     params = sql_expression.compile().params if sql_expression is not None else {}
     return ("AND " + early_filter) if early_filter != "NULL" else '', \
