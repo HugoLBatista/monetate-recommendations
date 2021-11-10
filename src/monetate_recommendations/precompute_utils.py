@@ -616,15 +616,15 @@ def get_recset_ids(recset_group):
         # account, algo, and lookback -> Retailer level recset (not market) and account level recset (not market)
         retailer_recset_ids = RecommendationSetDataset.objects.filter(
             account_id=recset_group.account, recommendation_set_id__algorithm=recset_group.algorithm,
-            recommendation_set_id__lookback_days=recset_group.lookback_days, recommendation_set_id__market_id=None,
-            recommendation_set_id__retailer_market_scope=None, recommendation_set_id__archived=False)
+            recommendation_set_id__lookback_days=recset_group.lookback_days,
+            recommendation_set_id__archived=False)
         retailer_recsets = RecommendationSet.objects.filter(
                 id__in=[retailer_recset_id.recommendation_set_id for retailer_recset_id in retailer_recset_ids]
             )
 
         account_recsets = RecommendationSet.objects.filter(
             (Q(account=recset_group.account, algorithm=recset_group.algorithm,
-               lookback_days=recset_group.lookback_days, market_id=None, retailer_market_scope=None, archived=False)))
+               lookback_days=recset_group.lookback_days, archived=False)))
         return retailer_recsets | account_recsets
 
     elif recset_group.market:
@@ -633,9 +633,8 @@ def get_recset_ids(recset_group):
                                                    lookback_days=recset_group.lookback_days,
                                                    archived=False)
         return recsets
-    # retailer market - processing "All accounts for this retailer" (global or account level recset)
     elif recset_group.retailer:
-        recsets = RecommendationSet.objects.filter(retailer_market_scope=1,
+        recsets = RecommendationSet.objects.filter(account_id=None,
                                                    retailer_id=recset_group.retailer,
                                                    algorithm=recset_group.algorithm,
                                                    lookback_days=recset_group.lookback_days,
