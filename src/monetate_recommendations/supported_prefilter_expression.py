@@ -10,6 +10,11 @@ NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
     'brand', 'item_group_id']
 SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
 
+# for non-prod type filters, we want to be more specific by using the catalog alias when referencing catalog fields
+# FILTER_COLUMN_MAPPING = {
+#     'product_type': 'product_type',
+#     'shipping_label':'c.shipping_label', and so on...
+FILTER_COLUMN_MAPPING = {key: "c." + key if key != "product_type" else key for key in NON_PRODUCT_TYPE_PREFILTER_FIELDS}
 
 # Assumptions:
 # We don't want to do assertions or validation in this code. That should be done in WebUI.
@@ -78,12 +83,9 @@ def startswith_expression(expression):
     like_statements = []
     for i in value:
         if i is not None:
-            like_statements.append(literal_column(field).startswith(i))
+            like_statements.append(literal_column(FILTER_COLUMN_MAPPING[field]).startswith(i))
             if field == 'product_type':
-                like_statements.append(literal_column(field).startswith(i))
                 like_statements.append(literal_column(field).contains(',' + i))
-            else:
-                like_statements.append(literal_column("c." + field).startswith(i))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
@@ -158,10 +160,7 @@ def contains_expression(expression):
     like_statements = []
     for i in value:
         if i is not None:
-            if field == "product_type":
-                like_statements.append(func.lower(literal_column(field)).contains(i.lower()))
-            else:
-                like_statements.append(func.lower(literal_column("c." + field)).contains(i.lower()))
+            like_statements.append(func.lower(literal_column(FILTER_COLUMN_MAPPING[field])).contains(i.lower()))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
@@ -184,10 +183,7 @@ def get_field_and_lower_val(expression):
 
 def in_expression(expression):
     field, value = get_field_and_lower_val(expression)
-    if field == "product_type":
-        return func.lower(literal_column(field)).in_(value)
-    else:
-        return func.lower(literal_column("c." + field)).in_(value)
+    return func.lower(literal_column(FILTER_COLUMN_MAPPING[field])).in_(value)
 
 
 def not_in_expression(expression):
@@ -210,12 +206,8 @@ def direct_sql_expression(expression):
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
     # iterate through each item in the list of values and getattr to invoke the right comparison function
-    if field == "product_type":
-        statements = [getattr(literal_column(field), python_expr_equivalent)(i) for i in value if i is not None]\
-            if type(value) is list else [getattr(literal_column(field), python_expr_equivalent)(value)]
-    else:
-        statements = [getattr(literal_column("c." + field), python_expr_equivalent)(literal(i)) for i in value if i is not None] \
-            if type(value) is list else [getattr(literal_column("c." + field), python_expr_equivalent)(literal(value))]
+    statements = [getattr(literal_column(FILTER_COLUMN_MAPPING[field]), python_expr_equivalent)(literal(i)) for i in value if i is not None] \
+        if type(value) is list else [getattr(literal_column(FILTER_COLUMN_MAPPING[field]), python_expr_equivalent)(literal(value))]
     # Multiple statements must be OR'ed together. Empty lists should return always false (1 = 2)
     return or_(*statements) if statements else text("1 = 2")
 
