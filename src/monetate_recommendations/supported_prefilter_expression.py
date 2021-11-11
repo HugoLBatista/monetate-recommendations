@@ -246,14 +246,13 @@ def and_with_convert_without_null(first_expression, second_expression):
         return and_(converted_first_expression, converted_second_expression)
 
 
-# non_product_type expressions are the early filter, product_type expressions are the late filter
-def get_query_and_variables(non_product_type_expression, product_type_expression, second_non_product_type_expression,
-                            second_product_type_expression):
+def get_query_and_variables(product_type_expression, non_product_type_expression, second_product_type_expression,
+                            second_non_product_type_expression):
     # we collate here to make sure that variable names dont get reused, e.g. "lower_1" showing up twice
-    sql_expression = collate(and_with_convert_without_null(non_product_type_expression,
-                                                           second_non_product_type_expression),
-                             and_with_convert_without_null(product_type_expression,
-                                                           second_product_type_expression))
+    sql_expression = collate(and_with_convert_without_null(product_type_expression,
+                                                           second_product_type_expression),
+                             and_with_convert_without_null(non_product_type_expression,
+                                                           second_non_product_type_expression))
     [early_filter, late_filter] = str(sql_expression).split(" COLLATE ")
     params = sql_expression.compile().params if sql_expression is not None else {}
     return ("AND " + early_filter) if early_filter != "NULL" else '', \
