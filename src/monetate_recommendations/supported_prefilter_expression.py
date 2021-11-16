@@ -5,7 +5,7 @@ from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, lit
 NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
     'shipping_label', 'description', 'shipping_height', 'mpn', 'price', 'material', 'tax', 'shipping_weight',
     'image_link', 'color', 'link', 'adult', 'promotion_id', 'multipack', 'age_group', 'id', 'condition', 'size',
-    'shipping', 'shipping_length', 'product_type', 'energy_efficiency_class', 'title', 'gender', 'size_type',
+    'shipping', 'shipping_length', 'energy_efficiency_class', 'title', 'gender', 'size_type',
     'shipping_width', 'is_bundle', 'additional_image_link', 'loyalty_points', 'pattern', 'sale_price', 'mobile_link',
     'brand', 'item_group_id']
 SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
@@ -14,7 +14,8 @@ SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type'
 # FILTER_COLUMN_MAPPING = {
 #     'product_type': 'product_type',
 #     'shipping_label':'c.shipping_label', and so on...
-FILTER_COLUMN_MAPPING = {key: "c." + key if key != "product_type" else key for key in NON_PRODUCT_TYPE_PREFILTER_FIELDS}
+FILTER_COLUMN_MAPPING = {key: "c." + key for key in NON_PRODUCT_TYPE_PREFILTER_FIELDS}
+FILTER_COLUMN_MAPPING["product_type"] = "product_type"
 
 # Assumptions:
 # We don't want to do assertions or validation in this code. That should be done in WebUI.
@@ -206,7 +207,7 @@ def direct_sql_expression(expression):
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
     # iterate through each item in the list of values and getattr to invoke the right comparison function
-    statements = [getattr(literal_column(FILTER_COLUMN_MAPPING[field]), python_expr_equivalent)(literal(i)) for i in value if i is not None] \
+    statements = [getattr(literal_column(FILTER_COLUMN_MAPPING[field]), python_expr_equivalent)(literal(i)) for i in value if i is not None]\
         if type(value) is list else [getattr(literal_column(FILTER_COLUMN_MAPPING[field]), python_expr_equivalent)(literal(value))]
     # Multiple statements must be OR'ed together. Empty lists should return always false (1 = 2)
     return or_(*statements) if statements else text("1 = 2")

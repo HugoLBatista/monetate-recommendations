@@ -24,7 +24,7 @@ empty_filter_json = json.dumps({
 
 class SupportedPrefilterTestCase(TestCase):
     def test_converted_and_not_none(self):
-        expected_combined_converted = "((product_type LIKE :product_type_1 || '%%') OR (product_type LIKE '%%' || :product_type_2 || '%%') OR (product_type LIKE :product_type_3 || '%%') OR (product_type LIKE '%%' || :product_type_4 || '%%')) AND ((product_type LIKE :product_type_1 || '%%') OR (product_type LIKE '%%' || :product_type_2 || '%%') OR (product_type LIKE :product_type_3 || '%%') OR (product_type LIKE '%%' || :product_type_4 || '%%'))"
+        expected_combined_converted = "((product_type LIKE :product_type_1 || '%%') OR (product_type LIKE '%%' || :product_type_2 || '%%') OR (product_type LIKE :product_type_3 || '%%') OR (product_type LIKE '%%' || :product_type_4 || '%%')) AND ((product_type LIKE :product_type_5 || '%%') OR (product_type LIKE '%%' || :product_type_6 || '%%') OR (product_type LIKE :product_type_7 || '%%') OR (product_type LIKE '%%' || :product_type_8 || '%%'))"
         expected_single_converted = "(product_type LIKE :product_type_1 || '%%') OR (product_type LIKE '%%' || :product_type_2 || '%%') OR (product_type LIKE :product_type_3 || '%%') OR (product_type LIKE '%%' || :product_type_4 || '%%')"
         expected_empty_converted = None
 
