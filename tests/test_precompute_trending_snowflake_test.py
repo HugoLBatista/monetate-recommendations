@@ -296,3 +296,65 @@ class TrendingTestCase(RecsTestCase):
             ],
             market=True,
         )
+
+    def test_sku_filter(self):
+        # 7-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  3                   2                   7
+        # TP-00004  5                   0                   3
+        #
+        # 30-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  3                   2                   10
+        # TP-00004  20                   0                   1
+        #
+        # TP-00005(SKU-00005/SKU-00006): 7/10
+        # TP-00004(SKU-00004): 5/20
+        filter_json = json.dumps({"type": "and", "filters": [{
+            "type": "in",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00005"]
+            },
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00005"]
+            },
+            "type": "startswith",
+            "right": {
+                "type": "field",
+                "field": "id"
+            },
+            "left": {
+                "type": "value",
+                "value": ["SKU-00006"]
+            },
+            "type": "!=",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00004"]
+            }
+        }]})
+        self._run_recs_test(
+            algorithm="trending",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00005', 1),
+                ('SKU-00006', 2),
+            ],
+            market=True,
+        )

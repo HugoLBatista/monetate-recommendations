@@ -327,3 +327,63 @@ class PurchaseValueTestCase(RecsTestCase):
             ],
             market=True,
         )
+
+    def test_sku_filter(self):
+        # 7-day totals:
+        # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
+        # TP-00005  2 * $2   (4)        2 * $2 (4)          1 * $2 (2)
+        # TP-00002  3 * $3   (9)        0 * $x (0)          2 * $3 (6)
+        # TP-00003  0 * $x   (0)        0 * $x (0)          3 * $3 (9)
+        #
+        #   TP-00002(SKU-00002): $15
+        #   TP-00005(SKU-00005/SKU-00006): $10
+        #   TP-00003(SKU-00003): $9
+        filter_json = json.dumps({"type": "and", "filters": [{
+            "type": "in",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00002"]
+            },
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00006"]
+            },
+            "type": "startswith",
+            "right": {
+                "type": "field",
+                "field": "id"
+            },
+            "left": {
+                "type": "value",
+                "value": ["SKU-00005"]
+            },
+            "type": "!=",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00003"]
+            }
+        }]})
+        self._run_recs_test(
+            algorithm="purchase_value",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00002', 1),
+                ('SKU-00005', 2),
+                ('SKU-00006', 3),
+            ],
+            market=True,
+        )
