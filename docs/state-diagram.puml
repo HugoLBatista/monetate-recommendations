@@ -4,6 +4,8 @@
 
 PENDING -[#green]-> PROCESSING : worker, attempts += 1
 
+PROCESSING -[#green]-> PROCESSING : worker, heartbeat = now
+
 PROCESSING -[#green]-> COMPLETE : worker
 PROCESSING -[#green]-> RETRYABLE_FAILURE : worker, transient exception
 PROCESSING -[#green]-> FAILED : worker
