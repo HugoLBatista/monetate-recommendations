@@ -1,0 +1,17 @@
+@startuml precompute state diagram v0.8.3
+
+[*] --> PENDING : enqueue_stale_recsets
+
+PENDING --> PROCESSING : worker if attempts < max_tries, ++attempts
+
+PROCESSING --> PROCESSING : worker if ((hb_time < (now - hb_threshold) or hb_time=None) and attempts < max_tries)
+PROCESSING --> SKIPPED : worker_thread if algorithm not in precompute_algo_map.FUNC_MAP.keys()
+PROCESSING --> COMPLETE : worker_thread
+PROCESSING --> SYSTEM_ERROR : worker if thread throws an exception or recset still in processing after thread completes
+
+PROCESSING --> PENDING : enqueue_stale_recsets if precompute_end_time < (now - 24 hours)
+COMPLETE --> PENDING : enqueue_stale_recsets if precompute_end_time < (now - 24 hours)
+SKIPPED --> PENDING : enqueue_stale_recsets if precompute_end_time < (now - 24 hours)
+SYSTEM_ERROR --> PENDING : enqueue_stale_recsets if precompute_end_time < (now - 24 hours)
+
+@enduml
