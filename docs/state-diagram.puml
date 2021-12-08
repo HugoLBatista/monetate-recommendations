@@ -2,14 +2,15 @@
 
 [*] -[#green]-> PENDING : enqueue, attempts = 0
 
-PENDING -[#green]-> PROCESSING : worker
+PENDING -[#green]-> PROCESSING : worker, attempts += 1
 
 PROCESSING -[#green]-> COMPLETE : worker
 PROCESSING -[#green]-> RETRYABLE_FAILURE : worker, transient exception
 PROCESSING -[#green]-> FAILED : worker
 
 PROCESSING -[#red]-> RETRYABLE_FAILURE: reaper, if heartbeat expired
-RETRYABLE_FAILURE -[#red]-> PENDING : reaper, if attempts < max_tries, attempts += 1
+
+RETRYABLE_FAILURE -[#red]-> PENDING : reaper, if attempts < max_tries
 RETRYABLE_FAILURE -[#red]-> FAILED : reaper, if attempts == max_tries
 
 COMPLETE -[#green]-> [*]
