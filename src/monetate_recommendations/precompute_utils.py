@@ -580,7 +580,7 @@ def unload_target_pid_path(account_id, market_id, retailer_id, algorithm, lookba
     return os.path.join(stage, path), bucket_time
 
 
-def get_account_ids_for_market_driven_recsets(recset, account_id):
+def get_account_ids_for_market_driven_recsets(recset, account_id=None):
     if recset.retailer_market_scope is True:
         account_ids = [account.id for account in recset.retailer.account_set.all()]
         log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids)))
@@ -668,6 +668,15 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     }
     """
     result_counts = []
+    if recset.is_market_or_retailer_driven_ds:
+        market_account_ids = get_account_ids_for_market_driven_recsets(recset)
+        create_metric_table(conn, market_account_ids, recset.lookback_days, recset.algorithm,
+                            text(metric_table_query.format(algorithm=recset.algorithm,
+                                                           account_id=None,
+                                                           lookback=recset.lookback_days,
+                                                           market_id=recset.market.id if recset.market else None,
+                                                           retailer_scope=recset.retailer_market_scope,
+                                                           )))
 
     for account_id in get_recset_account_ids(recset):
         log.log_info('Querying results for recset {}, account {}'.format(recset.id, account_id))
@@ -685,20 +694,21 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
             early_filter_exp, late_filter_exp, global_early_filter_exp, global_late_filter_exp)
         catalog_id = recset.product_catalog.id if recset.product_catalog else \
             dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
-        account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
-        create_metric_table(conn, account_ids, recset.lookback_days, recset.algorithm,
-                            text(metric_table_query.format(algorithm=recset.algorithm,
-                                                           account_id=account_id,
-                                                           lookback=recset.lookback_days,
-                                                           market_id=recset.market.id if recset.market else None,
-                                                           retailer_scope=recset.retailer_market_scope,
-                                                           )))
+        if not recset.is_market_or_retailer_driven_ds:
+            account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
+            create_metric_table(conn, account_ids, recset.lookback_days, recset.algorithm,
+                                text(metric_table_query.format(algorithm=recset.algorithm,
+                                                               account_id=account_id,
+                                                               lookback=recset.lookback_days,
+                                                               market_id=recset.market.id if recset.market else None,
+                                                               retailer_scope=recset.retailer_market_scope,
+                                                               )))
         unload_path, send_time = create_unload_target_path(account_id, recset.id)
         unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
 
         conn.execute(text(SKU_RANKS_BY_RECSET.format(algorithm=recset.algorithm,
                                                      recset_id=recset.id,
-                                                     account_id=account_id,
+                                                     account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
                                                      lookback=recset.lookback_days,
                                                      early_filter=early_filter_sql,
                                                      late_filter=late_filter_sql,
@@ -709,9 +719,9 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                      catalog_id=catalog_id,
                      **filter_variables)
         result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
-                                                                                          account_id=account_id,
+                                                                                          account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
                                                                                           **unload_sql))), 0))
-        conn.execute(text(SNOWFLAKE_UNLOAD.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
+        conn.execute(text(SNOWFLAKE_UNLOAD.format(recset_id=recset.id, account_id=None if recset.is_market_or_retailer_driven_ds else account_id, **unload_sql)),
                      shard_key=get_shard_key(account_id),
                      account_id=account_id,
                      recset_id=recset.id,
