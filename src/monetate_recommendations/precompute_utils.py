@@ -151,7 +151,7 @@ pid_algo_raw AS (
         product_id,
         SUM(subtotal) AS score
         {geo_columns}
-    FROM scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}
+    FROM scratch.{algorithm}_{metric_table_account_id}_{lookback}_{market_id}_{retailer_scope}
     GROUP BY product_id
     {geo_columns}
 ),
@@ -708,7 +708,8 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
 
         conn.execute(text(SKU_RANKS_BY_RECSET.format(algorithm=recset.algorithm,
                                                      recset_id=recset.id,
-                                                     account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
+                                                     account_id=account_id,
+                                                     metric_table_account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
                                                      lookback=recset.lookback_days,
                                                      early_filter=early_filter_sql,
                                                      late_filter=late_filter_sql,
@@ -719,9 +720,9 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                      catalog_id=catalog_id,
                      **filter_variables)
         result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
-                                                                                          account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
+                                                                                          account_id=account_id,
                                                                                           **unload_sql))), 0))
-        conn.execute(text(SNOWFLAKE_UNLOAD.format(recset_id=recset.id, account_id=None if recset.is_market_or_retailer_driven_ds else account_id, **unload_sql)),
+        conn.execute(text(SNOWFLAKE_UNLOAD.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
                      shard_key=get_shard_key(account_id),
                      account_id=account_id,
                      recset_id=recset.id,
