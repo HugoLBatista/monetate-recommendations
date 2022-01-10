@@ -151,7 +151,7 @@ pid_algo_raw AS (
         product_id,
         SUM(subtotal) AS score
         {geo_columns}
-    FROM scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}
+    FROM scratch.{algorithm}_{metric_table_account_id}_{lookback}_{market_id}_{retailer_scope}
     GROUP BY product_id
     {geo_columns}
 ),
@@ -688,7 +688,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
         create_metric_table(conn, account_ids, recset.lookback_days, recset.algorithm,
                             text(metric_table_query.format(algorithm=recset.algorithm,
-                                                           account_id=account_id,
+                                                           account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
                                                            lookback=recset.lookback_days,
                                                            market_id=recset.market.id if recset.market else None,
                                                            retailer_scope=recset.retailer_market_scope,
@@ -699,6 +699,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         conn.execute(text(SKU_RANKS_BY_RECSET.format(algorithm=recset.algorithm,
                                                      recset_id=recset.id,
                                                      account_id=account_id,
+                                                     metric_table_account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
                                                      lookback=recset.lookback_days,
                                                      early_filter=early_filter_sql,
                                                      late_filter=late_filter_sql,
