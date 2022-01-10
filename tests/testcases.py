@@ -3,6 +3,7 @@ import mock
 import json
 import os
 
+from django.utils import timezone
 import monetate.common.s3_filereader2 as s3_filereader2
 from monetate.common.warehouse.sqlalchemy_snowflake import get_stage_s3_uri_prefix
 import monetate.recs.models as recs_models
@@ -10,10 +11,12 @@ from monetate.test.testcases import SnowflakeTestCase
 import monetate.test.warehouse_utils as warehouse_utils
 from monetate_recommendations import precompute_utils
 from monetate_recommendations.precompute_algo_map import FUNC_MAP
+from monetate_recommendations.precompute_collab_algo_map import FUNC_MAP as COLLAB_FUNC_MAP
 import monetate.dio.models as dio_models
 from monetate.retailer.cache import invalidation_context
 import monetate.retailer.models as retailer_models
 from monetate.market.models import Market, MarketAccount
+from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 
 # Duct tape fix for running test in monetate_recommendations. Normally this would run as part of the
 # SnowflakeTestCase setup, but the snowflake_schema_path is not the same when ran from monetate_recommendations.
@@ -41,7 +44,7 @@ class RecsTestCase(SnowflakeTestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Accounts and product catalog setup common to the three algo tests."""
+        """Accounts and product catalog setup common to the algo tests."""
         super(RecsTestCase, cls).setUpClass()
         cls.account = warehouse_utils.create_account(session_cutover_time=warehouse_utils.LONG_AGO)
         # create feature flag
@@ -57,7 +60,14 @@ class RecsTestCase(SnowflakeTestCase):
                 status='dev',
                 description=''
             )
+            retailer_models.AccountFeatureFlag.objects.get_or_create(
+                name=retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING,
+                category=feature_category,
+                status='dev',
+                description=''
+            )
             cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_NONCOLLAB_RECS_PRECOMPUTE)
+            cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING)
         cls.account_id = cls.account.id
         cls.retailer_id = cls.account.retailer.id
         cls.product_catalog_id = warehouse_utils.create_default_catalog_schema(cls.account).schema_id
@@ -133,7 +143,7 @@ class RecsTestCase(SnowflakeTestCase):
                 order="algorithm",
                 version=1,
                 product_catalog=dio_models.Schema.objects.get(id=self.product_catalog_id),
-                retailer_market_scope=retailer_market_scope,
+                retailer_market_scope=self._setup_retailer_market(retailer_market_scope, market),
                 market=self._setup_market(market),
             )
 
@@ -142,19 +152,23 @@ class RecsTestCase(SnowflakeTestCase):
 
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
         unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
+
         s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
 
         with mock.patch('monetate.common.job_timing.record_job_timing'),\
              mock.patch('contextlib.closing', return_value=self.conn),\
              mock.patch('sqlalchemy.engine.Connection.close'),\
              mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
-                        autospec=True) as mock_suffix:
+                        autospec=True) as mock_suffix,\
+            mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
+                        autospec=True) as mock_pid_suffix:
             mock_suffix.return_value = unload_path, sent_time
-            FUNC_MAP[algorithm]([recset])
 
+            FUNC_MAP[algorithm]([recset])
         expected_results = expected_result_arr or [expected_result]
 
         actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)]
+
         self.assertEqual(len(actual_results), len(expected_results))
         for result_line in range(0, len(expected_results)):
             expected_result = expected_results[result_line]
@@ -173,14 +187,196 @@ class RecsTestCase(SnowflakeTestCase):
                 self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
                 self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])
 
-    def _setup_market(self, setup):
+    @classmethod
+    def _setup_market(cls, setup):
         if setup is True:
-            market = Market.objects.create(
+            cls.market = Market.objects.create(
                 name="Market from test",
-                retailer=self.account.retailer
+                retailer=cls.account.retailer
             )
             MarketAccount.objects.create(
-                account=self.account,
-                market=market
+                account=cls.account,
+                market=cls.market
             )
-            return market
+            return cls.market
+
+    @classmethod
+    def _setup_retailer_market(cls, retailer_market, market):
+        if retailer_market:
+            return True
+        elif market:
+            return False
+        else:
+            return None
+
+    @classmethod
+    def set_account(cls, recset, account=None):
+        # anytime a recset has a market, account_id should be None
+        if recset.is_market_or_retailer_driven_ds:
+            return None
+        # if not market and not retailer level, return account_id from RecommendationSet table
+        elif not recset.is_retailer_tenanted:
+            return recset.account
+        # if not market but retailer level, return the account_id of current account
+        return account
+
+class RecsTestCaseWithData(RecsTestCase):
+
+    @classmethod
+    @patch_invalidations
+    def setUpClass(cls):
+        super(RecsTestCaseWithData, cls).setUpClass()
+        factgen = WarehouseFactsTestGenerator()
+        mid0 = factgen.make_monetate_id(cls.account_id)
+        mid1 = factgen.make_monetate_id(cls.account_id)
+        mid2 = factgen.make_monetate_id(cls.account_id)
+
+        qty = 8
+        within_7_day = datetime.now() - timedelta(days=5)
+        within_30_day = datetime.now() - timedelta(days=29)
+
+        v = [
+            (mid0, within_7_day, 'TP-00003'),
+            (mid0, within_7_day, 'TP-00004'),
+            (mid0, within_7_day, 'TP-00005'),
+            (mid0, within_30_day, 'TP-00001'),
+            (mid0, within_30_day, 'TP-00002'),
+            (mid0, within_30_day, 'TP-00003'),
+            (mid0, within_30_day, 'TP-00004'),
+            (mid0, within_30_day, 'TP-00005'),
+
+            (mid1, within_7_day, 'TP-00002'),
+            (mid1, within_7_day, 'TP-00003'),
+            (mid1, within_30_day, 'TP-00001'),
+            (mid1, within_30_day, 'TP-00002'),
+
+
+            (mid2, within_7_day, 'TP-00004'),
+            (mid2, within_7_day, 'TP-00005'),
+            (mid2, within_30_day, 'TP-00001'),
+            (mid2, within_30_day, 'TP-00002'),
+            (mid2, within_30_day, 'TP-00003'),
+
+        ]
+        cls.conn.execute(
+            """
+            INSERT INTO fact_product_view
+            (fact_date, account_id, fact_time, mid_epoch, mid_ts, mid_rnd, product_id, qty_in_stock)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [(e[1].date(), e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[2], qty) for e in v]
+        )
+
+        p = [
+            (mid0, within_7_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid0, within_7_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid0, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid0, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid0, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid0, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid0, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid0, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid1, within_7_day, 'TP-00002', 'SKU-00005', 'purch_2', ),
+            (mid1, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid1, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid1, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid1, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid1, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid2, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid2, within_7_day, 'TP-00005', 'SKU-00002', 'purch_5', ),
+            (mid2, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid2, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid2, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid2, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+        ]
+        cls.conn.execute(
+            """
+            INSERT INTO m_dedup_purchase_line
+            (account_id, fact_time, mid_epoch, mid_ts, mid_rnd, purchase_id, line, product_id, sku, quantity, currency,
+             currency_unit_price, usd_unit_price, usd_unit_cost)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, *[(e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[4], 1, e[2], e[3], 1, 'USD', 3.0, 3.0, 3.0) for e in p]
+        )
+
+    @patch_invalidations
+    def _run_collab_recs_test(self, algorithm, lookback, recsets, pid_pid_expected_results, expected_results,
+                              account=None, market=None, retailer=None):
+
+        recset_group = recs_models.PrecomputeQueue.objects.get(
+                account=account,
+                market=market,
+                retailer=retailer,
+                algorithm=algorithm,
+                lookback_days=lookback,
+            )
+
+        unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group.account,
+                                                                                 recset_group.market,
+                                                                                 recset_group.retailer,
+                                                                                 algorithm, lookback)
+
+        s3_url_pid_pid = get_stage_s3_uri_prefix(self.conn, unload_pid_path)
+        unload_result = []
+        s3_urls = []
+        for recset in recsets:
+            unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
+            unload_result.append((unload_path, sent_time))
+            s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
+        with mock.patch('monetate.common.job_timing.record_job_timing'), \
+                mock.patch('contextlib.closing', return_value=self.conn), \
+                mock.patch('sqlalchemy.engine.Connection.close'), \
+                mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
+                           autospec=True) as mock_suffix, \
+                mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
+                           autospec=True) as mock_pid_suffix:
+            mock_pid_suffix.return_value = unload_pid_path, pid_send_time
+            mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
+            COLLAB_FUNC_MAP[algorithm]([recset_group])
+
+        # test pid - pid (recset group)
+        actual_results_pid = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
+        self.assertEqual(len(actual_results_pid), len(pid_pid_expected_results))
+        for result_line in range(0, len(pid_pid_expected_results)):
+            expected_result = pid_pid_expected_results[result_line]
+            actual_result = actual_results_pid[result_line]
+            # same lookup key
+            self.assertEqual(actual_result['document']['lookup_key'], expected_result[0])
+            # equal number product records vs expected
+            self.assertEqual(len(actual_result['document']['data']), len(expected_result[1]))
+            if recset_group.account_id:
+                self.assertEqual(actual_result['schema']['account_id'], recset_group.account_id)
+            if market:
+                self.assertEqual(actual_result['schema']['market_id'], recset_group.market_id)
+            if retailer:
+                self.assertEqual(actual_result['schema']['retailer_id'], recset_group.retailer_id)
+            self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS_PID')
+
+            # records match expected
+            for i, item in enumerate(expected_result[1]):
+                self.assertEqual(item[0], actual_result['document']['data'][i]['product_id'])
+                self.assertEqual(item[1], actual_result['document']['data'][i]['score'])
+
+        # test pid-sku (per recset)
+        for index, recset in enumerate(recsets):
+
+            expected_result_arr = expected_results[recset.id]
+            actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index])]
+            self.assertEqual(len(expected_result_arr), len(actual_results))
+
+            for i, item in enumerate(expected_result_arr):
+                actual_result = actual_results[i]
+                if recset.account:
+                    self.assertEqual(actual_result['account']['id'], recset.account.id)
+                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS')
+
+                self.assertEqual(len(actual_result['document']['data']), len(item[1]))
+                self.assertEqual(actual_result['document']['lookup_key'], item[0])
+                data = actual_result['document']['data']
+                for i, row in enumerate(item[1]):
+                    self.assertEqual(row[0], data[i]['id'])
+                    self.assertEqual(row[1], data[i]['rank'])
+
+
