@@ -76,15 +76,6 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
                     lookback_days=rec.lookback_days,
                 )
 
-    # def set_account(cls, recset, account=None):
-    #     # anytime a recset has a market, account_id should be None
-    #     if recset.is_market_or_retailer_driven_ds:
-    #         return None
-    #     # if not market and not retailer level, return account_id from RecommendationSet table
-    #     elif not recset.is_retailer_tenanted:
-    #         return recset.account
-    #     # if not market but retailer level, return the account_id of current account
-    #     return account
 
     def test_30_day_purchase_also_purchase_account_level(self):
         recsets = recs_models.RecommendationSet.objects.filter(
@@ -127,7 +118,7 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
             ('TP-00003', [('SKU-00001', 1)]),
             ('TP-00004', [('SKU-00001', 1)]),
         ]
-        # expected_results_arr = [recs1_expected_result, recs2_expected_result, recs3_expected_result]
+
         expected_results_arr = [recs1_expected_result, recs2_expected_result, recs3_expected_result]
         expected_results = {}
         for index, r in enumerate(recsets):
@@ -165,14 +156,6 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         expected_results_arr = [recs5_expected_result]
 
         expected_results = {}
-        # for r in recsets:
-        #     expected_results[r.id] = [
-        #         ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-        #         ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-        #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-        #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-        #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-        #     ]
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
         self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
@@ -207,14 +190,6 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         ]
         expected_results_arr = [recs5_expected_result]
         expected_results = {}
-        # for r in recsets:
-        #     expected_results[r.id] = [
-        #         ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-        #         ('TP-00001', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2), ('TP-00006')]),
-        #         ('TP-00003', [('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-        #         ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-        #         ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2), ('TP-00006')]),
-        #     ]
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
         self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,

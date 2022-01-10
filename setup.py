@@ -29,7 +29,7 @@ setup(
     install_requires=[
         "Django>=1.11,<2.0",
         "monetate-tenant==0.6",
-        "monetate-recs==1.0",
+        "monetate-recs==0.9",
         "azure-storage-blob==2.1.0",
         "snowflake-sqlalchemy==1.1.18",
     ],

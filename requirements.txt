@@ -6,7 +6,7 @@ azure-storage-common==2.1.0
 azure-storage-nspkg==3.1.0
 google-auth-oauthlib==0.4.1
 hypothesis==4.57.1
-monetate-recs==1.0
+monetate-recs==0.9
 monetate-tenant==0.6
 MySQL-python==1.2.5
 pyasn1-modules==0.2.8

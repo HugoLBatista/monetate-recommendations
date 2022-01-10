@@ -44,7 +44,7 @@ class RecsTestCase(SnowflakeTestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Accounts and product catalog setup common to the three algo tests."""
+        """Accounts and product catalog setup common to the algo tests."""
         super(RecsTestCase, cls).setUpClass()
         cls.account = warehouse_utils.create_account(session_cutover_time=warehouse_utils.LONG_AGO)
         # create feature flag
@@ -226,47 +226,37 @@ class RecsTestCaseWithData(RecsTestCase):
     @patch_invalidations
     def setUpClass(cls):
         super(RecsTestCaseWithData, cls).setUpClass()
-        # Todo: Rohit, add proper purchase data and view data in this function
-        # for 30,7,2 day lookback
-        # files that can help
-        #  monetate-recommendaiton test_precompute_purchase_snowflake_test -> setUpClass
-        # monetate-server -> rs_endcap_associated_pids_snowflake_test.py -> class ViewAlsoViewTestCase -> setupClass
         factgen = WarehouseFactsTestGenerator()
-        mid_us_pa = factgen.make_monetate_id(cls.account_id)
-        mid_us_nj = factgen.make_monetate_id(cls.account_id)
-        mid_ca_on = factgen.make_monetate_id(cls.account_id)
-        mid_ca_on2 = factgen.make_monetate_id(cls.account_id)
-        mid_ca_on3 = factgen.make_monetate_id(cls.account_id)
+        mid0 = factgen.make_monetate_id(cls.account_id)
+        mid1 = factgen.make_monetate_id(cls.account_id)
+        mid3 = factgen.make_monetate_id(cls.account_id)
+
         qty = 8
         within_7_day = datetime.now() - timedelta(days=5)
         within_30_day = datetime.now() - timedelta(days=29)
-        outside_30_day = datetime.now() - timedelta(days=40)
 
         v = [
-            (mid_us_pa, within_7_day, 'TP-00003'),
-            (mid_us_pa, within_7_day, 'TP-00004'),
-            (mid_us_pa, within_7_day, 'TP-00005'),
-            (mid_us_pa, within_30_day, 'TP-00001'),
-            (mid_us_pa, within_30_day, 'TP-00002'),
-            (mid_us_pa, within_30_day, 'TP-00003'),
-            (mid_us_pa, within_30_day, 'TP-00004'),
-            (mid_us_pa, within_30_day, 'TP-00005'),
+            (mid0, within_7_day, 'TP-00003'),
+            (mid0, within_7_day, 'TP-00004'),
+            (mid0, within_7_day, 'TP-00005'),
+            (mid0, within_30_day, 'TP-00001'),
+            (mid0, within_30_day, 'TP-00002'),
+            (mid0, within_30_day, 'TP-00003'),
+            (mid0, within_30_day, 'TP-00004'),
+            (mid0, within_30_day, 'TP-00005'),
 
-            (mid_us_nj, within_7_day, 'TP-00002'),
-            (mid_us_nj, within_7_day, 'TP-00003'),
-            (mid_us_nj, within_30_day, 'TP-00001'),
-            (mid_us_nj, within_30_day, 'TP-00002'),
-            # (mid_us_nj, within_30_day, 'TP-00003'),
-            # (mid_us_nj, within_30_day, 'TP-00004'),
-            # (mid_us_nj, within_30_day, 'TP-00005'),
+            (mid1, within_7_day, 'TP-00002'),
+            (mid1, within_7_day, 'TP-00003'),
+            (mid1, within_30_day, 'TP-00001'),
+            (mid1, within_30_day, 'TP-00002'),
 
-            (mid_ca_on, within_7_day, 'TP-00004'),
-            (mid_ca_on, within_7_day, 'TP-00005'),
-            (mid_ca_on, within_30_day, 'TP-00001'),
-            (mid_ca_on, within_30_day, 'TP-00002'),
-            (mid_ca_on, within_30_day, 'TP-00003'),
-            # (mid_ca_on, within_30_day, 'TP-00004'),
-            # (mid_ca_on, within_30_day, 'TP-00005'),
+
+            (mid3, within_7_day, 'TP-00004'),
+            (mid3, within_7_day, 'TP-00005'),
+            (mid3, within_30_day, 'TP-00001'),
+            (mid3, within_30_day, 'TP-00002'),
+            (mid3, within_30_day, 'TP-00003'),
+
         ]
         cls.conn.execute(
             """
@@ -274,38 +264,33 @@ class RecsTestCaseWithData(RecsTestCase):
             (fact_date, account_id, fact_time, mid_epoch, mid_ts, mid_rnd, product_id, qty_in_stock)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            #  (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
-            #  mid_us_pa[2], 'TP-00005', qty),
-            # (within_7_day.date(), mid_us_pa[0], within_7_day, mid_us_pa[1], mid_us_pa[3],
-            #  mid_us_pa[2], 'TP-00002', qty),
-            # # TODO: replace above lines with:
             [(e[1].date(), e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[2], qty) for e in v]
         )
 
         p = [
-            (mid_us_pa, within_7_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
-            (mid_us_pa, within_7_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
-            (mid_us_pa, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
-            (mid_us_pa, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid0, within_7_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid0, within_7_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid0, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid0, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
 
-            (mid_us_pa, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
-            (mid_us_pa, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
-            (mid_us_pa, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
-            (mid_us_pa, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid0, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid0, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid0, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid0, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
 
-            (mid_us_nj, within_7_day, 'TP-00002', 'SKU-00005', 'purch_2', ),
-            (mid_us_nj, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
-            (mid_us_nj, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
-            (mid_us_nj, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
-            (mid_us_nj, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
-            (mid_us_nj, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid1, within_7_day, 'TP-00002', 'SKU-00005', 'purch_2', ),
+            (mid1, within_7_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid1, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid1, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid1, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid1, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
 
-            (mid_ca_on, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
-            (mid_ca_on, within_7_day, 'TP-00005', 'SKU-00002', 'purch_5', ),
-            (mid_ca_on, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
-            (mid_ca_on, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
-            (mid_ca_on, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
-            (mid_ca_on, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid3, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid3, within_7_day, 'TP-00005', 'SKU-00002', 'purch_5', ),
+            (mid3, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid3, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid3, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid3, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
         ]
         cls.conn.execute(
             """
@@ -315,7 +300,6 @@ class RecsTestCaseWithData(RecsTestCase):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, *[(e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[4], 1, e[2], e[3], 1, 'USD', 3.0, 3.0, 3.0) for e in p]
         )
-
 
     @patch_invalidations
     def _run_collab_recs_test(self, algorithm, lookback, recsets, pid_pid_expected_results, expected_results,
@@ -352,7 +336,6 @@ class RecsTestCaseWithData(RecsTestCase):
             mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
             COLLAB_FUNC_MAP[algorithm]([recset_group])
 
-
         # test pid - pid (recset group)
         actual_results_pid = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
         self.assertEqual(len(actual_results_pid), len(pid_pid_expected_results))
@@ -375,8 +358,6 @@ class RecsTestCaseWithData(RecsTestCase):
             for i, item in enumerate(expected_result[1]):
                 self.assertEqual(item[0], actual_result['document']['data'][i]['product_id'])
                 self.assertEqual(item[1], actual_result['document']['data'][i]['score'])
-        
-
 
         # test pid-sku (per recset)
         for index, recset in enumerate(recsets):

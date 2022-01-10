@@ -75,17 +75,6 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                     lookback_days=rec.lookback_days,
                 )
 
-
-    # def set_account(cls, recset, account=None):
-    #     # anytime a recset has a market, account_id should be None
-    #     if recset.is_market_or_retailer_driven_ds:
-    #         return None
-    #     # if not market and not retailer level, return account_id from RecommendationSet table
-    #     elif not recset.is_retailer_tenanted:
-    #         return recset.account
-    #     # if not market but retailer level, return the account_id of current account
-    #     return account
-
     def test_30_day_view_also_view_account_level(self):
         recsets = recs_models.RecommendationSet.objects.filter(
             Q(algorithm='view_also_view',
@@ -100,8 +89,6 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               retailer_market_scope=None)
         )
 
-        # todo create a expected results  for each recset. Expected result should be a dict with key being the recset_id
-        # expected_results = {1:[]}
         pid_pid_expected_results = [
             ('TP-00001', [('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2), ('TP-00004', 2)]),
             ('TP-00004', [('TP-00005', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
@@ -109,8 +96,6 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
             ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
             ('TP-00002', [('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2), ('TP-00004', 2)]),
         ]
-        #todo all the recs expected resulut should be pid sku
-        # (TP-00004, [(sku1, 1), (sku2, 2)])
         recs1_expected_result = [
             ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
             ('TP-00001', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00004', 5)]),

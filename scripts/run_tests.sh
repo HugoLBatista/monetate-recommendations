@@ -1,3 +1,4 @@
+# this script doesnt work right now
 cd ./monetate-recommendations
 ls ../venv/monetate-recommendations/bin/activate
 pwd
