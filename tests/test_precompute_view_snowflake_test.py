@@ -330,3 +330,63 @@ class MostViewedTestCase(RecsTestCase):
             ],
             market=True,
         )
+
+    def test_sku_filter(self):
+        # 7-day totals:
+        # PRODUCT   Views in US/PA      Views in US/NJ      Views in CA/ON
+        # TP-00005  2                   2                   1
+        # TP-00002  5                   0                   2
+        # TP-00003  0                   0                   3
+        #
+        # TP-00002(SKU-00002): 7
+        # TP-00005(SKU-00005/SKU-00006): 5
+        # TP-00003(SKU-00003): 3
+        filter_json = json.dumps({"type": "and", "filters": [{
+            "type": "in",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00005"]
+            },
+            "type": "contains",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00005"]
+            },
+            "type": "startswith",
+            "right": {
+                "type": "field",
+                "field": "id"
+            },
+            "left": {
+                "type": "value",
+                "value": ["SKU-00006"]
+            },
+            "type": "!=",
+            "left": {
+                "type": "field",
+                "field": "id"
+            },
+            "right": {
+                "type": "value",
+                "value": ["SKU-00003"]
+            }
+        }]})
+        self._run_recs_test(
+            algorithm="view",
+            lookback=7,
+            filter_json=filter_json,
+            expected_result=[
+                ('SKU-00002', 1),
+                ('SKU-00005', 2),
+                ('SKU-00006', 3),
+            ],
+            market=True,
+        )

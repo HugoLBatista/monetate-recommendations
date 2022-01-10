@@ -186,10 +186,6 @@ class RecsTestCase(SnowflakeTestCase):
             for i, item in enumerate(expected_result):
                 self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
                 self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])
-                if len(item) > 2:
-                    self.assertEqual(item[2], actual_result['document']['data'][i]['COUNTRY_CODE'])
-                if len(item) > 3:
-                    self.assertEqual(item[3], actual_result['document']['data'][i]['REGION'])
 
     @classmethod
     def _setup_market(cls, setup):

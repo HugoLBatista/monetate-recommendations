@@ -39,7 +39,7 @@ FROM (
         'document', object_construct(
             'pushdown_filter_hash', sha1(LOWER(CONCAT('product_type=', {dynamic_product_type} {geo_hash_sql}))),
             'data', (
-                array_agg(object_construct(*))
+                array_agg(object_construct('ID', id,  'SCORE', score, 'RANK', rank))
                 WITHIN GROUP (ORDER BY rank ASC)
             )
         ),
@@ -634,6 +634,7 @@ def get_recset_ids(recset_group):
                                                    lookback_days=recset_group.lookback_days,
                                                    archived=False)
         return recsets
+    # retailer market - processing "All accounts for this retailer" (global or account level recset)
     elif recset_group.retailer:
         recsets = RecommendationSet.objects.filter(retailer_market_scope=1,
                                                    retailer_id=recset_group.retailer,
