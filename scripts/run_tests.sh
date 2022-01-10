@@ -1,4 +1,5 @@
 # this script doesnt work right now
+# Todo: create working scripts to run tests from command line (work in progress)
 cd ./monetate-recommendations
 ls ../venv/monetate-recommendations/bin/activate
 pwd

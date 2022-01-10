@@ -229,7 +229,7 @@ class RecsTestCaseWithData(RecsTestCase):
         factgen = WarehouseFactsTestGenerator()
         mid0 = factgen.make_monetate_id(cls.account_id)
         mid1 = factgen.make_monetate_id(cls.account_id)
-        mid3 = factgen.make_monetate_id(cls.account_id)
+        mid2 = factgen.make_monetate_id(cls.account_id)
 
         qty = 8
         within_7_day = datetime.now() - timedelta(days=5)
@@ -251,11 +251,11 @@ class RecsTestCaseWithData(RecsTestCase):
             (mid1, within_30_day, 'TP-00002'),
 
 
-            (mid3, within_7_day, 'TP-00004'),
-            (mid3, within_7_day, 'TP-00005'),
-            (mid3, within_30_day, 'TP-00001'),
-            (mid3, within_30_day, 'TP-00002'),
-            (mid3, within_30_day, 'TP-00003'),
+            (mid2, within_7_day, 'TP-00004'),
+            (mid2, within_7_day, 'TP-00005'),
+            (mid2, within_30_day, 'TP-00001'),
+            (mid2, within_30_day, 'TP-00002'),
+            (mid2, within_30_day, 'TP-00003'),
 
         ]
         cls.conn.execute(
@@ -285,12 +285,12 @@ class RecsTestCaseWithData(RecsTestCase):
             (mid1, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
             (mid1, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
 
-            (mid3, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
-            (mid3, within_7_day, 'TP-00005', 'SKU-00002', 'purch_5', ),
-            (mid3, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
-            (mid3, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
-            (mid3, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
-            (mid3, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid2, within_7_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+            (mid2, within_7_day, 'TP-00005', 'SKU-00002', 'purch_5', ),
+            (mid2, within_30_day, 'TP-00001', 'SKU-00005', 'purch_1', ),
+            (mid2, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
+            (mid2, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
+            (mid2, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
         ]
         cls.conn.execute(
             """

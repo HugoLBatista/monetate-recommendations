@@ -624,8 +624,7 @@ def get_recset_ids(recset_group):
 
         account_recsets = RecommendationSet.objects.filter(
             (Q(account=recset_group.account, algorithm=recset_group.algorithm,
-               lookback_days=recset_group.lookback_days, market_id=None, retailer_market_scope=None,
-               archived=False)))
+               lookback_days=recset_group.lookback_days, market_id=None, retailer_market_scope=None, archived=False)))
         return retailer_recsets | account_recsets
 
     elif recset_group.market:
