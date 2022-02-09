@@ -296,7 +296,7 @@ WITH
             normalized_score
         FROM sku_algo
     )
-    WHERE rank <= 1000
+    WHERE rank <= 50
     
 """
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
