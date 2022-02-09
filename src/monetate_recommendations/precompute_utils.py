@@ -797,17 +797,18 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                                                         lookback_days=lookback_days,  market_id=market,
                                                         retailer_id=retailer,
                                                         )))
-    unload_pid_path, send_time = unload_target_pid_path(account, market, retailer, algorithm, lookback_days)
-     # writes the pid-pid relation to s3
-    conn.execute(text(SNOWFLAKE_UNLOAD_PID_PID.format(algorithm=algorithm, account_id=account,
-                                                      lookback_days=lookback_days, market_id=market,
-                                                      retailer_id=retailer)),
-                 account_id=account, market_id=market,
-                 retailer_id=retailer,
-                 sent_time=send_time,
-                 target=unload_pid_path,
-                 algorithm=algorithm,
-                 lookback_days=lookback_days)
+    # commenting out as previous plans of plans of pursuing different architecture not on roadmap at least for now
+    # unload_pid_path, send_time = unload_target_pid_path(account, market, retailer, algorithm, lookback_days)
+    # writes the pid-pid relation to s3
+    # conn.execute(text(SNOWFLAKE_UNLOAD_PID_PID.format(algorithm=algorithm, account_id=account,
+    #                                                   lookback_days=lookback_days, market_id=market,
+    #                                                   retailer_id=retailer)),
+    #              account_id=account, market_id=market,
+    #              retailer_id=retailer,
+    #              sent_time=send_time,
+    #              target=unload_pid_path,
+    #              algorithm=algorithm,
+    #              lookback_days=lookback_days)
     # Initializing udf functions for applying product_type dynamic filters
     conn.execute(text(UDF_CONTAINS))
     conn.execute(text(UDF_STARTSWITH))
