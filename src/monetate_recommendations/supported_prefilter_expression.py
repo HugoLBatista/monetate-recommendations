@@ -7,7 +7,7 @@ NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
     'image_link', 'color', 'link', 'adult', 'promotion_id', 'multipack', 'age_group', 'id', 'condition', 'size',
     'shipping', 'shipping_length', 'energy_efficiency_class', 'title', 'gender', 'size_type',
     'shipping_width', 'is_bundle', 'additional_image_link', 'loyalty_points', 'pattern', 'sale_price', 'mobile_link',
-    'brand', 'item_group_id']
+    'brand', 'item_group_id', 'availability']
 SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
 
 # for non-prod type filters, we want to be more specific by using the catalog alias when referencing catalog fields
