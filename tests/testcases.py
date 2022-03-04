@@ -302,7 +302,7 @@ class RecsTestCaseWithData(RecsTestCase):
         )
 
     @patch_invalidations
-    def _run_collab_recs_test(self, algorithm, lookback, recsets, pid_pid_expected_results, expected_results,
+    def _run_collab_recs_test(self, algorithm, lookback, recsets, expected_results,
                               account=None, market=None, retailer=None):
 
         recset_group = recs_models.PrecomputeQueue.objects.get(
@@ -337,27 +337,28 @@ class RecsTestCaseWithData(RecsTestCase):
             COLLAB_FUNC_MAP[algorithm]([recset_group])
 
         # test pid - pid (recset group)
-        actual_results_pid = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
-        self.assertEqual(len(actual_results_pid), len(pid_pid_expected_results))
-        for result_line in range(0, len(pid_pid_expected_results)):
-            expected_result = pid_pid_expected_results[result_line]
-            actual_result = actual_results_pid[result_line]
-            # same lookup key
-            self.assertEqual(actual_result['document']['lookup_key'], expected_result[0])
-            # equal number product records vs expected
-            self.assertEqual(len(actual_result['document']['data']), len(expected_result[1]))
-            if recset_group.account_id:
-                self.assertEqual(actual_result['schema']['account_id'], recset_group.account_id)
-            if market:
-                self.assertEqual(actual_result['schema']['market_id'], recset_group.market_id)
-            if retailer:
-                self.assertEqual(actual_result['schema']['retailer_id'], recset_group.retailer_id)
-            self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS_PID')
+        # commenting out as we are currently not using pid_pid output
+        # actual_results_pid = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url_pid_pid)]
+        # self.assertEqual(len(actual_results_pid), len(pid_pid_expected_results))
+        # for result_line in range(0, len(pid_pid_expected_results)):
+        #     expected_result = pid_pid_expected_results[result_line]
+        #     actual_result = actual_results_pid[result_line]
+        #     # same lookup key
+        #     self.assertEqual(actual_result['document']['lookup_key'], expected_result[0])
+        #     # equal number product records vs expected
+        #     self.assertEqual(len(actual_result['document']['data']), len(expected_result[1]))
+        #     if recset_group.account_id:
+        #         self.assertEqual(actual_result['schema']['account_id'], recset_group.account_id)
+        #     if market:
+        #         self.assertEqual(actual_result['schema']['market_id'], recset_group.market_id)
+        #     if retailer:
+        #         self.assertEqual(actual_result['schema']['retailer_id'], recset_group.retailer_id)
+        #     self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS_PID')
 
             # records match expected
-            for i, item in enumerate(expected_result[1]):
-                self.assertEqual(item[0], actual_result['document']['data'][i]['product_id'])
-                self.assertEqual(item[1], actual_result['document']['data'][i]['score'])
+            # for i, item in enumerate(expected_result[1]):
+            #     self.assertEqual(item[0], actual_result['document']['data'][i]['product_id'])
+            #     self.assertEqual(item[1], actual_result['document']['data'][i]['score'])
 
         # test pid-sku (per recset)
         for index, recset in enumerate(recsets):
