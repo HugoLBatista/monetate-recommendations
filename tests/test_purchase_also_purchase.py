@@ -91,13 +91,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               retailer_market_scope=None)
         )
 
-        pid_pid_expected_results = [
-            ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
-            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-            ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-            ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-            ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-        ]
+        # commenting out as we are currently not using pid_pid output
+        # pid_pid_expected_results = [
+        #     ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
+        #     ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        #     ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        #     ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+        #     ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        # ]
         recs1_expected_result = [
             ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
             ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
@@ -123,7 +124,7 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         expected_results = {}
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
-        self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
+        self._run_collab_recs_test('purchase_also_purchase', 30, recsets,
                                    expected_results, account=self.account)
 
     def test_30_day_purchase_also_purchase_account_level_market(self):
@@ -139,13 +140,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               market=self.market,
               retailer_market_scope=False)
         )
-        pid_pid_expected_results = [
-            ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
-            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-            ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-            ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-            ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-        ]
+        # commenting out as we are currently not using pid_pid output
+        # pid_pid_expected_results = [
+        #     ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
+        #     ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        #     ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        #     ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+        #     ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        # ]
         recs5_expected_result = [
             ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
             ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
@@ -158,7 +160,7 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         expected_results = {}
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
-        self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
+        self._run_collab_recs_test('purchase_also_purchase', 30, recsets,
                                    expected_results, market=self.market)
 
     def test_30_day_purchase_also_purchase_account_level_retailer_market(self):
@@ -174,13 +176,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               market=None,
               retailer_market_scope=True)
         )
-        pid_pid_expected_results = [
-            ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
-            ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-            ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-            ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
-            ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
-        ]
+        # commenting out as we are currently not using pid_pid output
+        # pid_pid_expected_results = [
+        #     ('TP-00001', [('TP-00004', 3), ('TP-00003', 3), ('TP-00002', 3), ('TP-00005', 2)]),
+        #     ('TP-00004', [('TP-00003', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        #     ('TP-00003', [('TP-00004', 3), ('TP-00002', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        #     ('TP-00005', [('TP-00004', 2), ('TP-00003', 2), ('TP-00002', 2), ('TP-00001', 2)]),
+        #     ('TP-00002', [('TP-00004', 3), ('TP-00003', 3), ('TP-00001', 3), ('TP-00005', 2)]),
+        # ]
         recs5_expected_result =[
             ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
             ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
@@ -192,7 +195,7 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         expected_results = {}
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
-        self._run_collab_recs_test('purchase_also_purchase', 30, recsets, pid_pid_expected_results,
+        self._run_collab_recs_test('purchase_also_purchase', 30, recsets,
                                    expected_results, account=None, market=None, retailer=self.retailer_id)
 
     def test_7_day_purchase_also_purchase_account_level(self):
@@ -209,13 +212,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               retailer_market_scope=None)
         )
 
-        pid_pid_expected_results = [
-            ('TP-00001', [('TP-00004', 1), ('TP-00003', 1), ('TP-00002', 1)]),
-            ('TP-00004', [('TP-00005', 2), ('TP-00003', 1), ('TP-00002', 1), ('TP-00001', 1)]),
-            ('TP-00003', [('TP-00002', 2), ('TP-00004', 1), ('TP-00001', 1)]),
-            ('TP-00005', [('TP-00004', 2)]),
-            ('TP-00002', [('TP-00003', 2), ('TP-00004', 1), ('TP-00001', 1)]),
-        ]
+        # commenting out as we are currently not using pid_pid output
+        # pid_pid_expected_results = [
+        #     ('TP-00001', [('TP-00004', 1), ('TP-00003', 1), ('TP-00002', 1)]),
+        #     ('TP-00004', [('TP-00005', 2), ('TP-00003', 1), ('TP-00002', 1), ('TP-00001', 1)]),
+        #     ('TP-00003', [('TP-00002', 2), ('TP-00004', 1), ('TP-00001', 1)]),
+        #     ('TP-00005', [('TP-00004', 2)]),
+        #     ('TP-00002', [('TP-00003', 2), ('TP-00004', 1), ('TP-00001', 1)]),
+        # ]
         expected_results = {}
         for r in recsets:
             expected_results[r.id] = [
@@ -225,6 +229,6 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
                 ('TP-00005', [('SKU-00004', 1)]),
                 ('TP-00002', [('SKU-00003', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
             ]
-        self._run_collab_recs_test('purchase_also_purchase', 7, recsets, pid_pid_expected_results, expected_results,
+        self._run_collab_recs_test('purchase_also_purchase', 7, recsets, expected_results,
                                    account=self.account)
 
