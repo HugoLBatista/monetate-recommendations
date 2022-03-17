@@ -1,5 +1,5 @@
 from monetate_recommendations.settings import *
-
+import six
 SECRET_KEY = 'test only secret key'  # noqa
 
 MIGRATION_MODULES = {
@@ -74,7 +74,7 @@ else:
         s3 = boto3.resource('s3')
         password_object = s3.Object('secret-monetate-dev', 'db/snowflake/test_user/password.txt')
         SNOWFLAKE_QUERY_DSN = 'snowflake://test_user:{password}@monetatedev.us-east-1/test_db/'.format(
-            password=password_object.get()['Body'].read().strip())
+            password=six.ensure_text(password_object.get()['Body'].read().strip()))
     except Exception:
         SNOWFLAKE_QUERY_DSN = ''
 if 'SNOWFLAKE_LOAD_DSN' not in os.environ:
