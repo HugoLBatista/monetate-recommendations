@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import datetime, timedelta
-
+import six
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 
 from . import patch_invalidations
@@ -267,17 +267,17 @@ class PurchaseValueTestCase(RecsTestCase):
                 ('SKU-00006', 2, 'US', 'PA'),
             ]
         ], geo_target="region", pushdown_filter_hashes=[
-            hashlib.sha1('product_type=/country_code=CA/region=ON'.lower()).hexdigest(),
-            hashlib.sha1('product_type=Clothing > Jeans/country_code=CA/region=ON'.lower()).hexdigest(),
-            hashlib.sha1('product_type=Clothing > Pants/country_code=CA/region=ON'.lower()).hexdigest(),
-            hashlib.sha1('product_type=test/country_code=CA/region=ON'.lower()).hexdigest(),
-            hashlib.sha1('product_type=/country_code=US/region=NJ'.lower()).hexdigest(),
-            hashlib.sha1('product_type=Clothing > Jeans/country_code=US/region=NJ'.lower()).hexdigest(),
-            hashlib.sha1('product_type=test/country_code=US/region=NJ'.lower()).hexdigest(),
-            hashlib.sha1('product_type=/country_code=US/region=PA'.lower()).hexdigest(),
-            hashlib.sha1('product_type=Clothing > Jeans/country_code=US/region=PA'.lower()).hexdigest(),
-            hashlib.sha1('product_type=Clothing > Pants/country_code=US/region=PA'.lower()).hexdigest(),
-            hashlib.sha1('product_type=test/country_code=US/region=PA'.lower()).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=CA/region=ON'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans/country_code=CA/region=ON'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=Clothing > Pants/country_code=CA/region=ON'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=test/country_code=CA/region=ON'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=US/region=NJ'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans/country_code=US/region=NJ'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=test/country_code=US/region=NJ'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=US/region=PA'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans/country_code=US/region=PA'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=Clothing > Pants/country_code=US/region=PA'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=test/country_code=US/region=PA'.lower())).hexdigest(),
         ])
 
     def test_purchase_retailer_scope(self):

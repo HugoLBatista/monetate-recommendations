@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime, timedelta
+import six
 
 from . import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
@@ -277,10 +278,10 @@ class MostViewedTestCase(RecsTestCase):
                 ('SKU-00004', 3),
             ]
         ], pushdown_filter_hashes=[
-            hashlib.sha1('product_type='.lower()).hexdigest(),
-            hashlib.sha1('product_type=Clothing > Jeans'.lower()).hexdigest(),
-            hashlib.sha1('product_type=Clothing > Pants'.lower()).hexdigest(),
-            hashlib.sha1('product_type=test'.lower()).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type='.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=Clothing > Pants'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=test'.lower())).hexdigest(),
         ])
 
     def test_view_retailer_scope(self):
