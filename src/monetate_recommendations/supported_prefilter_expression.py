@@ -1,5 +1,5 @@
 from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, literal
-from past.builtins import basestring
+import six
 
 # NOTE: availability/availability_date/expiration_date/sale_price_effective_date_begin/sale_price_effective_date_end
 # not included so that such filters make the results update quickly
@@ -180,7 +180,7 @@ def not_contains_expression(expression):
 
 
 def get_field_and_lower_val(expression):
-    return expression["left"]["field"], [(v.lower() if isinstance(v, basestring) else v) for v in expression["right"]["value"]]
+    return expression["left"]["field"], [(v.lower() if isinstance(v, six.string_types) else v) for v in expression["right"]["value"]]
 
 
 def in_expression(expression):
