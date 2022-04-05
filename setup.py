@@ -34,9 +34,7 @@ setup(
         "djangorestframework<=3.9.0",  # last verison which supports both py2 and py3
         "monetate-bandit",
         "monetate-recs",
-        "anyjson",
         "aws-encryption-sdk",
-        "attrs",
         "beautifulsoup4<=4.9.3",  # The final version of Beautiful Soup to support Python 2 was 4.9.3
         "cachetools<=3.1.1",  # last verison which supports both py2 and py3
         "Cerberus",
@@ -51,16 +49,13 @@ setup(
         "jmespath<1.0.0,>=0.7.1",  # is required by boto3, botocore
         "Jinja2~=2.10.1",  # is required by Markupsafe
         "jsonpath-rw",
-        "lxml",
         # newer versions of markupdafe ask for another version of requests which isn't compatible with python-snowflake-connector
         "MarkupSafe<=1.1.1",
         "mock<=3.0.5",
         "mysqlclient~=1.3.14",  # last verison which supports both py2 and py3
-        "numpy<=1.16.6",  # last verison which supports both py2 and py3
         "pandas<=0.23.4",  # last verison which supports both py2 and py3
         "paramiko<=2.0.9",  # last verison which supports both py2 and py3
         "pycrypto",
-        "pycryptodomex",
         "pylibmc",
         "pyOpenSSL<=18.0.0",  # dependency from sqlalchemy
         "pytz<2021.0",  # strict requirement from snowflake-connector-python
@@ -71,9 +66,7 @@ setup(
         "snowflake-connector-python==2.1.3",  # 2.7.3 was failing due to pyarrow dep
         "snowflake-sqlalchemy~=1.1.14",  # dependent on snowflake-connector-python
         "SQLAlchemy~=1.1.4",  # dependent on snowflake-connector-python
-        "sqlparse==0.2.4",  # last verison which supports both py2 and py3
-        "zeep<=3.4.0",  # last verison which supports both py2 and py3
-    ],
+       ],
     extras_require={
         "test": [
             "bravado>=8.4.0,<8.5",
