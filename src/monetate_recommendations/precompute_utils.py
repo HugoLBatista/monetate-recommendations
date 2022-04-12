@@ -6,6 +6,7 @@ import datetime
 import json
 import binascii
 import bisect
+import six
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from copy import deepcopy
@@ -19,7 +20,7 @@ import monetate.dio.models as dio_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
-from supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
+from .supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -390,11 +391,11 @@ def parse_supported_filters(filter_json):
         )
 
     filter_dict = json.loads(filter_json)
-    supported_filters = filter(_filter_supported_filters, filter_dict['filters'])
-    product_type_filters = filter(_filter_product_type, supported_filters)
-    static_product_type_filters = filter(_filter_dynamic, product_type_filters)
-    static_supported_filters = filter(_filter_supported_static_filter, supported_filters)
-    static_supported_filters_non_product_type = filter(_filter_not_product_type, static_supported_filters)
+    supported_filters = list(filter(_filter_supported_filters, filter_dict['filters']))
+    product_type_filters = list(filter(_filter_product_type, supported_filters))
+    static_product_type_filters = list(filter(_filter_dynamic, product_type_filters))
+    static_supported_filters = list(filter(_filter_supported_static_filter, supported_filters))
+    static_supported_filters_non_product_type = list(filter(_filter_not_product_type, static_supported_filters))
 
     # when the expression is an "or" expression, we can only prefilter if all fields are supported for pre-filtering
     # AND there is not a mixture of filters on product_type plus other fields. product_type filtering is performed in
@@ -459,7 +460,7 @@ def create_metric_table(conn, account_ids, lookback, algorithm, query):
 
 
 def get_shard_key(account_id):
-    return binascii.crc32(str(account_id)) % CLUSTER_MAX
+    return binascii.crc32(six.ensure_binary(str(account_id))) % CLUSTER_MAX
 
 
 def get_shard_range(shard_key):

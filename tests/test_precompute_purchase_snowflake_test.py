@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import json
 import hashlib
+import six
 
 from . import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
@@ -161,8 +162,8 @@ class PurchaseCountTestCase(RecsTestCase):
                 ('SKU-00002', 3, "US"),
             ]
         ], geo_target="country", pushdown_filter_hashes=[
-            hashlib.sha1('product_type=/country_code=CA'.lower()).hexdigest(),
-            hashlib.sha1('product_type=/country_code=US'.lower()).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=CA'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=US'.lower())).hexdigest(),
         ])
 
     def test_purchase_with_region_geo_30_days(self):
@@ -194,9 +195,9 @@ class PurchaseCountTestCase(RecsTestCase):
                 ('SKU-00006', 3, "US", "PA"),
             ]
         ], geo_target="region", pushdown_filter_hashes=[
-            hashlib.sha1('product_type=/country_code=CA/region=ON'.lower()).hexdigest(),
-            hashlib.sha1('product_type=/country_code=US/region=NJ'.lower()).hexdigest(),
-            hashlib.sha1('product_type=/country_code=US/region=PA'.lower()).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=CA/region=ON'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=US/region=NJ'.lower())).hexdigest(),
+            hashlib.sha1(six.ensure_binary('product_type=/country_code=US/region=PA'.lower())).hexdigest(),
         ])
 
     def test_purchase_filter(self):

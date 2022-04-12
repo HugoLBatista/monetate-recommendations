@@ -223,7 +223,6 @@ class RecsTestCase(SnowflakeTestCase):
 class RecsTestCaseWithData(RecsTestCase):
 
     @classmethod
-    @patch_invalidations
     def setUpClass(cls):
         super(RecsTestCaseWithData, cls).setUpClass()
         factgen = WarehouseFactsTestGenerator()
