@@ -27,12 +27,46 @@ setup(
     author_email='monetate_recommendations-team@monetate.com',
     classifiers=[],
     install_requires=[
+        "chardet<3.1.0,>=3.0.2",  # is required by requests
+        "css-parser",
         "Django>=1.11,<2.0",
-        "monetate-tenant==0.6",
-        "monetate-recs==0.9",
-        "azure-storage-blob==2.1.0",
-        "snowflake-sqlalchemy==1.1.18",
-    ],
+        "django-json-rpc",
+        "djangorestframework<=3.9.0",  # last version which supports both py2 and py3
+        "monetate-bandit",
+        "monetate-recs",
+        "aws-encryption-sdk",
+        "beautifulsoup4<=4.9.3",  # The final version of Beautiful Soup to support Python 2 was 4.9.3
+        "cachetools<=3.1.1",  # last version which supports both py2 and py3
+        "Cerberus",
+        "certifi<2021.0.0",  # is required by snowflake-connector-python
+        "ciso8601",
+        "decorator<=4.1.2",  # last version which supports both py2 and py3
+        "FormEncode",
+        "googleads",
+        "idna<2.9",  # is required by snowflake-connector-python, requests
+        "iso8601<=0.1.4",  # required by py2
+        "isodate",
+        "jmespath<1.0.0,>=0.7.1",  # is required by boto3, botocore
+        "Jinja2~=2.10.1",  # is required by Markupsafe
+        "jsonpath-rw",
+        # newer versions of markupdafe ask for another version of requests which isn't compatible with python-snowflake-connector
+        "MarkupSafe<=1.1.1",
+        "mock<=3.0.5",
+        "mysqlclient~=1.3.14",  # last version which supports both py2 and py3
+        "pandas<=0.23.4",  # last version which supports both py2 and py3
+        "paramiko<=2.0.9",  # last version which supports both py2 and py3
+        "pycrypto",
+        "pylibmc",
+        "pyOpenSSL<=18.0.0",  # dependency from sqlalchemy
+        "pytz<2021.0",  # strict requirement from snowflake-connector-python
+        "python-dateutil==2.8.0",
+        "requests==2.22.0",  # required by snowflake-connector to get the tests running
+        "rsa<4.6",  # is required by google-auth
+        "s3transfer<0.3.0,>=0.2.0",  # set by boto3
+        "snowflake-connector-python==2.1.3",  # 2.7.3 was failing due to pyarrow dep
+        "snowflake-sqlalchemy~=1.1.14",  # dependent on snowflake-connector-python
+        "SQLAlchemy~=1.1.4",  # dependent on snowflake-connector-python
+       ],
     extras_require={
         "test": [
             "bravado>=8.4.0,<8.5",
