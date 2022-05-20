@@ -810,9 +810,6 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     #              target=unload_pid_path,
     #              algorithm=algorithm,
     #              lookback_days=lookback_days)
-    # Initializing udf functions for applying product_type dynamic filters
-    conn.execute(text(UDF_CONTAINS))
-    conn.execute(text(UDF_STARTSWITH))
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:

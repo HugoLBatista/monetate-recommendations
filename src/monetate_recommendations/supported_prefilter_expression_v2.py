@@ -43,7 +43,7 @@ def startswith_expression(expression):
     value = expression["right"]["value"]
 
     if field == "product_type" and expression["right"]["type"] == "function":
-        return text("udf_startswith(recommendation.product_type, context.product_type)")
+        return text("startswith_udf(recommendation.product_type, context.product_type)")
 
     like_statements = []
     for i in value:
@@ -67,7 +67,7 @@ def contains_expression(expression):
     value = expression["right"]["value"]
 
     if field == "product_type" and expression["right"]["type"] == "function":
-        return text("udf_contains(recommendation.product_type, context.product_type)")
+        return text("contains_udf(recommendation.product_type, context.product_type)")
 
     like_statements = []
     for i in value:
