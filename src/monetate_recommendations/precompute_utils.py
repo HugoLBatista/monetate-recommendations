@@ -341,28 +341,6 @@ JOIN filtered_devices fd
     AND fd.mid_rnd = p.mid_rnd
 """
 
-UDF_CONTAINS = """
-CREATE OR REPLACE TEMPORARY FUNCTION udf_contains(c string,t string)
-  RETURNS boolean
-  LANGUAGE JAVASCRIPT
-AS
-'
-  product_type_arr = C.split(",").map(a => a.trim()) 
-  return product_type_arr.some(prod_type => T.includes(prod_type));
-';
-"""
-
-UDF_STARTSWITH = """
-CREATE OR REPLACE TEMPORARY FUNCTION udf_startswith(c string,t string)
-  RETURNS boolean
-  LANGUAGE JAVASCRIPT
-AS
-'
-  product_type_arr = C.split(",").map(a => a.trim()) 
-  return product_type_arr.some(prod_type => T.startsWith(prod_type));
-';
-"""
-
 
 def parse_supported_filters(filter_json):
     def _filter_product_type(f):
