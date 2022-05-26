@@ -5,7 +5,8 @@ from monetate.recs.models import PrecomputeQueue
 
 FUNC_MAP = {
     'purchase_also_purchase': precompute_purchase_also_purchase_algorithm,
-    'view_also_view': precompute_view_also_view_algorithm
+    'view_also_view': precompute_view_also_view_algorithm,
+    'similar_products_v2': precompute_similar_products_v2
 }
 
 
