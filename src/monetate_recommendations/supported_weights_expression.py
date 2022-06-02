@@ -1,4 +1,4 @@
-from sqlalchemy import literal_column, text, case, select, func, Table
+from sqlalchemy import literal_column, text, case, select, func, Table, and_
 import monetate.dio.models as dio_models
 
 DEFAULT_FIELDS = ['shipping_label', 'description', 'shipping_height', 'mpn', 'price', 'material', 'tax',
@@ -9,43 +9,55 @@ DEFAULT_FIELDS = ['shipping_label', 'description', 'shipping_height', 'mpn', 'pr
                   'sale_price_effective_date_begin','sale_price_effective_date_end']
 
 def get_weights_query(weights_json, catalog_id, account, market, retailer, lookback_days):
-    converted_cols = []
+    query_statements = []
     selected_attributes = []
-    active_fields = {field['name']:field['data_type'] for field in
-                     dio_models.Schema.objects.get(id=catalog_id).active_version.fields.values("name", "data_type")}
+    #Get the active fields for the given catalog as a dict `attribute_name:data_type`
+    active_attributes = {field['name']:field['data_type'] for field in
+                     dio_models.Schema.objects.get(id=catalog_id).active_field_set.values("name", "data_type")}
 
     for attribute in weights_json:
-        col = attribute['catalog_attribute']
+        attribute_name = attribute['catalog_attribute']
         #check if the selected attribute is one of active attribute for the account
-        #if yes then check if its one of the custom fields if yes then retrieve custom column attribute with the
-        # name and datatype as custom:name::datatype ; else access the column with just the column name
-        if col in active_fields.keys():
-            if col not in DEFAULT_FIELDS:
-                data_type = active_fields[col]
-                query_col = 'custom:' + col + '::' + data_type
+        #if yes then check if its one of the custom fields
+        #if yes then retrieve custom column attribute with the name and datatype as custom:name::datatype
+        #else access the column with just the column name
+        if attribute_name in active_attributes.keys():
+            if attribute_name not in DEFAULT_FIELDS:
+                data_type = active_attributes[attribute_name]
+                query_column_name = 'custom:' + attribute_name + '::' + data_type
             else:
-                query_col = col
-            selected_attributes.append(col)
+                query_column_name = attribute_name
+            selected_attributes.append(attribute_name)
             weight = attribute.get('weight', None)
 
             if weight:
                 statement = case(
                     [
-                        (literal_column("pc1." + query_col).__eq__(literal_column("pc2." + query_col)), weight)
+                        (and_(
+                            literal_column("pc1." + query_column_name).isnot(None),
+                            literal_column("pc2." + query_column_name).isnot(None),
+                            literal_column("pc1." + query_column_name).__eq__(literal_column("pc2." + query_column_name))
+                        ),
+                         weight)
                     ],
                     else_=0)
             else:
                 statement = case(
                     [
-                        (literal_column("pc1." + query_col).__eq__(literal_column("pc2." + query_col)),
-                         text('(SELECT 1/count(*) FROM scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days}\
-                          WHERE {column}=pc1.{column})'.format(column=query_col, account_id=account, market_id=market,
-                                                        retailer_id=retailer, lookback_days=lookback_days)))
+                        (and_(
+                            literal_column("pc1." + query_column_name).isnot(None),
+                            literal_column("pc2." + query_column_name).isnot(None),
+                            literal_column("pc1." + query_column_name).__eq__(literal_column("pc2." + query_column_name))
+                        ),
+                         text('(SELECT COALESCE(1/NULLIF(count(*),0), 0) FROM \
+                         scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days} \
+                         WHERE {column}=pc1.{column})'.format(column=query_column_name, account_id=account, market_id=market,
+                                                              retailer_id=retailer, lookback_days=lookback_days)))
                     ],
                     else_=0)
-            converted_cols.append(statement)
+            query_statements.append(statement)
 
     return ",\n".join(
-        [str(exp.compile(compile_kwargs={"literal_binds": True})) + ' AS ' + selected_attributes[index] for index, exp
-         in enumerate(converted_cols)]) if \
-               converted_cols else None, "+".join(selected_attributes)
+        [str(statement.compile(compile_kwargs={"literal_binds": True})) + ' AS ' + selected_attributes[index] for index, statement
+         in enumerate(query_statements)]) if \
+               query_statements else None, "+".join(selected_attributes)

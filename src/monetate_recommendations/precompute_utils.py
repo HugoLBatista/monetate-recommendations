@@ -340,11 +340,12 @@ JOIN filtered_devices fd
     AND fd.mid_rnd = p.mid_rnd
 """
 
+# Retrieving the products only if they are available in stock for the given retailer
 GET_RETAILER_PRODUCT_CATALOG = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 SELECT *
 FROM product_catalog
-WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id
+WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability)=lower(:availability)
 """
 
 UDF_CONTAINS = """
@@ -448,7 +449,8 @@ def create_helper_query(conn, accounts_to_process, lookback, algorithm, account,
             raise TypeError
         retailer_id = account.retailer_id
         dataset_id = dio_models.DefaultAccountCatalog.objects.get(account=account.id).schema.id
-        conn.execute(query, retailer_id=retailer_id, dataset_id=dataset_id)
+        availability = "In Stock"
+        conn.execute(query, retailer_id=retailer_id, dataset_id=dataset_id, availability=availability)
 
 
 def create_metric_table(conn, account_ids, lookback, algorithm, query):
@@ -778,7 +780,8 @@ def get_account_ids_for_catalog_join_and_output(recset, queue_account):
 def get_similar_products_weights(account, market, retailer, lookback_days):
     recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account)
     weights_json = json.loads(recommendation_settings[0].similar_product_weights_json) if recommendation_settings else None
-    #weights_json = json.loads('{"enabled_catalog_attributes": [{"catalog_attribute": "brand"}]}')
+    if weights_json is None:
+        raise TypeError
     weights_json = weights_json["enabled_catalog_attributes"]
     catalog_id = dio_models.DefaultAccountCatalog.objects.get(account=account).schema.id
     weights_sql, selected_attributes = supported_weights_expression.get_weights_query(weights_json, catalog_id, \
@@ -818,7 +821,6 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     log.log_info('Querying results for recset group {}'.format(recset_group.id))
     log.log_info("Processing algorithm {}, lookback {}".format(algorithm, lookback_days))
     account_ids = get_account_ids_for_processing(recset_group)
-
     # this query creates a temp table with all the purchases or views in given lookback period
     create_helper_query(conn, account_ids, lookback_days, algorithm, recset_group.account,
                         text(helper_query.format(account_id=account, market_id=market,

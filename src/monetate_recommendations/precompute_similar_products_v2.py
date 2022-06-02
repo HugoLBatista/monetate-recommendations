@@ -10,13 +10,13 @@ log.configure_script_log('precompute_PAP_algorithm')
 #TODO: update the join on product catalog, we are multiplying our counts with the skus
 SIMILAR_PRODUCTS_V2 = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-WITH truth_table as (SELECT pc1.id as pid1, pc2.id as pid2,
+WITH truth_table as (SELECT pc1.item_group_id as pid1, pc2.item_group_id as pid2,
                       {weights}
                      FROM scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days} pc1
                      JOIN scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days} pc2 ON
-                     pc1.retailer_id = pc2.retailer_id AND
-                     pc1.id != pc2.id)
-SELECT pid1, pid2, {selected_attributes} AS Weight FROM truth_table
+                     (pc1.retailer_id = pc2.retailer_id AND
+                     pc1.item_group_id != pc2.item_group_id))
+SELECT {account_id} as account_id, pid1, pid2, {selected_attributes} AS Score FROM truth_table
 """
 
 

@@ -1,6 +1,7 @@
 from collections import defaultdict
 from monetate_recommendations.precompute_purchase_also_purchase import precompute_purchase_also_purchase_algorithm
 from monetate_recommendations.precompute_view_also_view import precompute_view_also_view_algorithm
+from monetate_recommendations.precompute_similar_products_v2 import precompute_similar_products_v2
 from monetate.recs.models import PrecomputeQueue
 
 FUNC_MAP = {
