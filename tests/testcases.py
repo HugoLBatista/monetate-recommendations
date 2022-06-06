@@ -87,24 +87,28 @@ class RecsTestCase(SnowflakeTestCase):
             """
             INSERT INTO product_catalog
                 (retailer_id, dataset_id, id, description, image_link, item_group_id, link, price, product_type,
-                 title, update_time, brand, is_bundle)
+                 title, update_time, brand, is_bundle, color)
             VALUES
-                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00001', 'test', 'http://monetate.com/SKU-00001.jpg',
-             'TP-00001', 'http://monetate.com/1', 1.99, 'Clothing > Pants', 'Jean Pants', update_time, "ab", False),
+             'TP-00001', 'http://monetate.com/1', 1.99, 'Clothing > Pants', 'Jean Pants', update_time, "ab", False,
+             'black'),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00002', 'test', 'http://monetate.com/SKU-00002.jpg',
              'TP-00002', 'http://monetate.com/2', 2.99, 'Clothing > Pants, test', 'Jean Pants', update_time, "bc",
-             True),
+             True, 'black'),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00003', 'test', 'http://monetate.com/SKU-00003.jpg',
-             'TP-00003', 'http://monetate.com/3', 3.99, 'Clothing > Pants', 'Jean Pants', update_time, "cd", True),
+             'TP-00003', 'http://monetate.com/3', 3.99, 'Clothing > Pants', 'Jean Pants', update_time, "cd", True,
+             'red'),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00004', 'test', 'http://monetate.com/SKU-00004.jpg',
              'TP-00004', 'http://monetate.com/4', 4.99, 'test ,    Clothing > Jeans', 'Jean Pants', update_time, "de",
-             False),
+             False, 'red'),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00005', 'test', 'http://monetate.com/SKU-00005.jpg',
-             'TP-00005', 'http://monetate.com/5', 5.99, 'Clothing > Jeans', 'Jean Pants', update_time, "ef", False),
+             'TP-00005', 'http://monetate.com/5', 5.99, 'Clothing > Jeans', 'Jean Pants', update_time, "ef", False,
+             'blue'),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00006', 'test', 'http://monetate.com/SKU-00006.jpg',
-             'TP-00005', 'http://monetate.com/5', 6.99, 'test,Clothing > Jeans', 'Jean Pants', update_time, "fg", True),
+             'TP-00005', 'http://monetate.com/5', 6.99, 'test,Clothing > Jeans', 'Jean Pants', update_time, "fg", True,
+             'white'),
         )
         cutoff_time = now - timedelta(minutes=10)
         cls.conn.execute(
@@ -330,9 +334,15 @@ class RecsTestCaseWithData(RecsTestCase):
                 mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
                            autospec=True) as mock_suffix, \
                 mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
-                           autospec=True) as mock_pid_suffix:
+                           autospec=True) as mock_pid_suffix, \
+                mock.patch('monetate.dio.models.Schema.objects.get') as mock_active_attributes:
             mock_pid_suffix.return_value = unload_pid_path, pid_send_time
             mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
+            mock_active_attributes.return_value = {'active_field_set':{'values' :[{'name': u'id', 'data_type': u'STRING'},
+                                                   {'name': u'title', 'data_type': u'STRING'},
+                                                   {'name': u'description', 'data_type': u'STRING'},
+                                                   {'name': u'link', 'data_type': u'STRING'},
+                                                   {'name': u'image_link', 'data_type': u'STRING'}]}}
             COLLAB_FUNC_MAP[algorithm]([recset_group])
 
         # test pid - pid (recset group)
@@ -378,4 +388,5 @@ class RecsTestCaseWithData(RecsTestCase):
                 for i, row in enumerate(item[1]):
                     self.assertEqual(row[0], data[i]['id'])
                     self.assertEqual(row[1], data[i]['rank'])
+
 
