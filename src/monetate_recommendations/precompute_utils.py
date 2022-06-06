@@ -308,6 +308,8 @@ SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, max(fact_time) as fac
 FROM m_dedup_purchase_line
 WHERE account_id in (:account_ids)
     AND fact_time >= :begin_fact_time
+    /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
+    AND product_id NOT IN ('', 'null', 'NULL')
 GROUP BY 1, 2, 3, 4, 5
 """
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
@@ -315,14 +317,12 @@ GROUP BY 1, 2, 3, 4, 5
 GET_EARLIEST_VIEW_PER_MID_AND_PID = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 WITH device_earliest_product_view AS (
-    SELECT fact_product_view.account_id, mid_epoch, mid_ts, mid_rnd, product_id, min(fact_time) fact_time
+    SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, min(fact_time) fact_time
     FROM fact_product_view
-    /* ignore views whose pids are not in catalog so invalid pids coming in on view facts do not get into the results */
-    JOIN config_account ON (fact_product_view.account_id = config_account.account_id)
-    JOIN product_catalog ON (fact_product_view.product_id = product_catalog.item_group_id
-        AND config_account.retailer_id = product_catalog.retailer_id)
-    WHERE fact_product_view.account_id in (:account_ids) AND
-        fact_time >= :begin_fact_time
+    WHERE account_id in (:account_ids)
+        AND fact_time >= :begin_fact_time
+        /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
+        AND product_id NOT IN ('', 'null', 'NULL')
     GROUP BY 1, 2, 3, 4, 5
 ),
 filtered_devices AS (
