@@ -348,29 +348,6 @@ FROM product_catalog
 WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability)=lower(:availability)
 """
 
-UDF_CONTAINS = """
-CREATE OR REPLACE TEMPORARY FUNCTION udf_contains(c string,t string)
-  RETURNS boolean
-  LANGUAGE JAVASCRIPT
-AS
-'
-  product_type_arr = C.split(",").map(a => a.trim()) 
-  return product_type_arr.some(prod_type => T.includes(prod_type));
-';
-"""
-
-UDF_STARTSWITH = """
-CREATE OR REPLACE TEMPORARY FUNCTION udf_startswith(c string,t string)
-  RETURNS boolean
-  LANGUAGE JAVASCRIPT
-AS
-'
-  product_type_arr = C.split(",").map(a => a.trim()) 
-  return product_type_arr.some(prod_type => T.startsWith(prod_type));
-';
-"""
-
-
 def parse_supported_filters(filter_json):
     def _filter_product_type(f):
         return f['left']['field'] == 'product_type'
@@ -390,12 +367,12 @@ def parse_supported_filters(filter_json):
     #   3. it is a product_type field OR it is a constant (not a function = constant)
     def _filter_supported_filters(f):
         return (
-                       f['left']['field'].lower() in SUPPORTED_PREFILTER_FIELDS
-               ) and (
-                       f['type'] in FILTER_MAP
-               ) and (
-                       f['right']['type'] != 'function' or f['left']['field'] == 'product_type'
-               )
+                f['left']['field'].lower() in SUPPORTED_PREFILTER_FIELDS
+        ) and (
+                f['type'] in FILTER_MAP
+        ) and (
+                f['right']['type'] != 'function' or f['left']['field'] == 'product_type'
+        )
 
     filter_dict = json.loads(filter_json)
     supported_filters = list(filter(_filter_supported_filters, filter_dict['filters']))
@@ -565,7 +542,7 @@ def create_unload_target_path(account_id, recset_id):
     stage, vshard_lower, vshard_upper, interval_duration, bucket_time = get_path_info(account_id)
 
     path = '{data_jurisdiction}/{bucket_time:%Y/%m/%d}/{data_jurisdiction}-{bucket_time:%Y%m%dT%H%M%S.000Z}_PT' \
-           '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{account_id}_{recset_id}.json.gz' \
+           '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{account_id}_{recset_id}.json.gz'\
         .format(data_jurisdiction=DATA_JURISDICTION,
                 bucket_time=bucket_time,
                 interval_duration=interval_duration,
@@ -851,9 +828,6 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     #              target=unload_pid_path,
     #              algorithm=algorithm,
     #              lookback_days=lookback_days)
-    # Initializing udf functions for applying product_type dynamic filters
-    conn.execute(text(UDF_CONTAINS))
-    conn.execute(text(UDF_STARTSWITH))
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
@@ -861,10 +835,9 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
         for account_id in account_ids:
             log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
-            global_filter_json = recommendation_settings[
-                0].filter_json if recommendation_settings else u'{"type":"or","filters":[]}'
-            filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json,
-                                                                                  global_filter_json)
+            global_filter_json = recommendation_settings[0].filter_json if recommendation_settings \
+                else u'{"type":"or","filters":[]}'
+            filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json)
             try:
                 catalog_id = recset.product_catalog.id if recset.product_catalog else \
                     dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
