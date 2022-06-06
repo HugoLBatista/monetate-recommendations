@@ -116,7 +116,6 @@ FROM (
     FROM scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
     WHERE ordinal <= 10000
     GROUP BY lookup_key
-
 )
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
@@ -297,7 +296,6 @@ WITH
         FROM sku_algo
     )
     WHERE rank <= 50
-
 """
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
 # example  6814_None_None
@@ -614,8 +612,8 @@ def get_recset_ids(recset_group):
             recommendation_set_id__lookback_days=recset_group.lookback_days, recommendation_set_id__market_id=None,
             recommendation_set_id__retailer_market_scope=None, recommendation_set_id__archived=False)
         retailer_recsets = RecommendationSet.objects.filter(
-            id__in=[retailer_recset_id.recommendation_set_id for retailer_recset_id in retailer_recset_ids]
-        )
+                id__in=[retailer_recset_id.recommendation_set_id for retailer_recset_id in retailer_recset_ids]
+            )
 
         account_recsets = RecommendationSet.objects.filter(
             (Q(account=recset_group.account, algorithm=recset_group.algorithm,
@@ -720,7 +718,7 @@ def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_quer
     result_counts = []
     # Disable pooling so temp tables do not persist on connections returned to pool
     engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
-    with job_timing.job_timer('precompute_{}_algorithm'.format(algorithm)), \
+    with job_timing.job_timer('precompute_{}_algorithm'.format(algorithm)),\
             contextlib.closing(engine.connect()) as warehouse_conn:
         warehouse_conn.execute("use warehouse {}".format(
             getattr(settings, 'RECS_COLLAB_QUERY_WH', os.environ.get('RECS_COLLAB_QUERY_WH', 'QUERY8_WH'))))
@@ -835,8 +833,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
         for account_id in account_ids:
             log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
-            global_filter_json = recommendation_settings[0].filter_json if recommendation_settings \
-                else u'{"type":"or","filters":[]}'
+            global_filter_json = recommendation_settings[0].filter_json if recommendation_settings else u'{"type":"or","filters":[]}'
             filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json)
             try:
                 catalog_id = recset.product_catalog.id if recset.product_catalog else \
