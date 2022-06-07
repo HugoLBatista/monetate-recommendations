@@ -312,8 +312,8 @@ GROUP BY 1, 2, 3, 4, 5
 """
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
 # example  6814_None_None
-GET_LAST_VIEW_PER_MID_AND_PID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+GET_EARLIEST_VIEW_PER_MID_AND_PID = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 WITH device_earliest_product_view AS (
     SELECT fact_product_view.account_id, mid_epoch, mid_ts, mid_rnd, product_id, min(fact_time) fact_time
     FROM fact_product_view
