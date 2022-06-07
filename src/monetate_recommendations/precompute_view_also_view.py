@@ -18,8 +18,8 @@ half_scores AS (
         p1.product_id pid1,
         p2.product_id pid2,
         count(*) score 
-    FROM scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
-    JOIN scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+    FROM scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+    JOIN scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
         ON p1.account_id = p2.account_id
         AND p1.mid_epoch = p2.mid_epoch
         AND p1.mid_ts = p2.mid_ts
@@ -50,4 +50,4 @@ half_scores AS (
 def precompute_view_also_view_algorithm(recsets_group):
     return precompute_utils.initialize_process_collab_algorithm(recsets_group, 'view_also_view',
                                                                 VIEW_ALSO_VIEW,
-                                                                precompute_utils.GET_LAST_VIEW_PER_MID_AND_PID)
+                                                                precompute_utils.GET_EARLIEST_VIEW_PER_MID_AND_PID)
