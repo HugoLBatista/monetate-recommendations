@@ -421,12 +421,11 @@ def create_helper_query(conn, accounts_to_process, lookback, algorithm, account,
         # market
         # we want to fail if the account is None
         if account is None:
-            raise TypeError
+            raise ValueError('Account has no Account ID for similar products execution, using None')
         retailer_id = account.retailer_id
         dataset_id = dio_models.DefaultAccountCatalog.objects.get(account=account.id).schema.id
         availability = "In Stock"
         conn.execute(query, retailer_id=retailer_id, dataset_id=dataset_id, availability=availability)
-
 
 def create_metric_table(conn, account_ids, lookback, algorithm, query):
     begin_fact_time, end_fact_time = get_fact_time(lookback)
@@ -756,7 +755,7 @@ def get_similar_products_weights(account, market, retailer, lookback_days):
     recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account)
     weights_json = json.loads(recommendation_settings[0].similar_product_weights_json) if recommendation_settings else None
     if weights_json is None:
-        raise TypeError
+        raise ValueError('Account {} has no weights JSON for similar products execution, using None'.format(account))
     weights_json = weights_json["enabled_catalog_attributes"]
     catalog_id = dio_models.DefaultAccountCatalog.objects.get(account=account).schema.id
     weights_sql, selected_attributes = supported_weights_expression.get_weights_query(weights_json, catalog_id, \
@@ -783,8 +782,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     # since the queue table currently has accounts that do not have the precompute collab feature flag
     # we don't want to process these queue entries
     if recset_group.account and \
-            not recset_group.account.has_feature(
-                retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
+            not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
         log.log_info("skipping results for recset group with id {} - does not have collab feature flag"
                      .format(recset_group.id))
         return result_counts
