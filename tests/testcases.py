@@ -379,3 +379,4 @@ class RecsTestCaseWithData(RecsTestCase):
                     self.assertEqual(row[0], data[i]['id'])
                     self.assertEqual(row[1], data[i]['rank'])
 
+
