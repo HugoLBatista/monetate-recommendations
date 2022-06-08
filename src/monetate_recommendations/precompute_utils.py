@@ -424,6 +424,7 @@ def create_helper_query(conn, accounts_to_process, lookback, algorithm, account,
             raise ValueError('Account has no Account ID for similar products execution, using None')
         retailer_id = account.retailer_id
         dataset_id = dio_models.DefaultAccountCatalog.objects.get(account=account.id).schema.id
+        #TODO: availability is Adidas specific, need to change in the future to support all clients
         availability = "In Stock"
         conn.execute(query, retailer_id=retailer_id, dataset_id=dataset_id, availability=availability)
 
