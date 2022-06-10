@@ -141,7 +141,7 @@ def direct_sql_expression(expression, catalog_fields):
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
     if field == 'product_type' and expression['right']['type'] == 'function':
-        return literal_column(get_column(field, "recommendation")).__eq__(literal_column(get_column(field, "context", catalog_fields)))
+        return literal_column(get_column(field, "recommendation", catalog_fields)).__eq__(literal_column(get_column(field, "context", catalog_fields)))
     # iterate through each item in the list of values and getattr to invoke the right comparison function
     statements = [getattr(literal_column(get_column(field, "recommendation", catalog_fields)), python_expr_equivalent)(literal(i)) for i in value if i is not None]\
         if type(value) is list else [getattr(literal_column(get_column(field, "recommendation", catalog_fields)), python_expr_equivalent)(literal(value))]
