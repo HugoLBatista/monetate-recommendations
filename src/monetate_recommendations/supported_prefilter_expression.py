@@ -9,33 +9,48 @@ NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
     'shipping_width', 'is_bundle', 'additional_image_link', 'loyalty_points', 'pattern', 'sale_price', 'mobile_link',
     'brand', 'item_group_id', 'availability']
 SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
+UNSUPPORTED_PREFILTER_FIELDS = [
+    'retailer_id', 'dataset_id', 'id', 'availability_date', 'expiration_date', 'sale_price_effective_date_begin',
+    'sale_price_effective_date_end', 'update_time'
+]
+SUPPORTED_DATA_TYPES = [
+    'string', 'number', 'datetime', 'boolean'
+]
+DATA_TYPE_TO_SNOWFLAKE_TYPE = {
+    'string': 'string',
+    'number': 'number',
+    'datetime': 'datetime',
+    'boolean': 'boolean'
+}
+
 
 # for non-prod type filters, we want to be more specific by using the catalog alias when referencing catalog fields
-# FILTER_COLUMN_MAPPING = {
-#     'product_type': 'product_type',
-#     'shipping_label':'c.shipping_label', and so on...
-FILTER_COLUMN_MAPPING = {key: "c." + key for key in NON_PRODUCT_TYPE_PREFILTER_FIELDS}
-FILTER_COLUMN_MAPPING["product_type"] = "product_type"
+def get_column(field, catalog_fields):
+    if field == 'product_type':
+        return 'product_type'
+    catalog_field = next(catalog_field for catalog_field in catalog_fields if catalog_field["name"].lower() == field)
+    return ("c." + field) if field in SUPPORTED_PREFILTER_FIELDS else \
+        ("c.custom:" + field + "::" + DATA_TYPE_TO_SNOWFLAKE_TYPE[catalog_field["data_type"].lower()])
 
 # Assumptions:
 # We don't want to do assertions or validation in this code. That should be done in WebUI.
 # Field names should only be "product_type"
 
-def boolean(expression):
+def boolean(expression, catalog_fields):
     filters = expression["filters"]
     expression_type = expression["type"]
     sqlalchemy_type = and_ if expression_type == "and" else or_
 
     converted_filters = []
     for sub_expression in filters:
-        sub_result = convert(sub_expression)
+        sub_result = convert(sub_expression, catalog_fields)
         if sub_result is not None:
             converted_filters.append(sub_result)
 
     return sqlalchemy_type(*converted_filters) if converted_filters else None
 
 
-def startswith_expression(expression):
+def startswith_expression(expression, catalog_fields):
     """Convert `startswith` type `filter_json` expressions to SQLAlchemy `BooleanClauseList`.
     NB:
     The query effectively matches COMPARISON_OPERATIONS_STRING_TO_LIST['startswith'] in filter_json.json_expression
@@ -84,7 +99,7 @@ def startswith_expression(expression):
     like_statements = []
     for i in value:
         if i is not None:
-            like_statements.append(literal_column(FILTER_COLUMN_MAPPING[field]).startswith(i))
+            like_statements.append(literal_column(get_column(field, catalog_fields)).startswith(i))
             if field == 'product_type':
                 like_statements.append(literal_column(field).contains(',' + i))
     if not like_statements:
@@ -93,7 +108,7 @@ def startswith_expression(expression):
     return or_(*like_statements)
 
 
-def not_startswith_expression(expression):
+def not_startswith_expression(expression, catalog_fields):
     """Converts a 'not startswith' expression to a sqlalchemy expression by wrapping it in a not clause.
     {
         "type": "not startswith",
@@ -121,10 +136,10 @@ def not_startswith_expression(expression):
     Falsey comparisons (empty list) are rendered as "NOT 1 = 2".
     """
 
-    return not_(startswith_expression(expression))
+    return not_(startswith_expression(expression, catalog_fields))
 
 
-def contains_expression(expression):
+def contains_expression(expression, catalog_fields):
     """Convert `contains` type `filter_json` expressions to SQLAlchemy `BooleanClauseList`.
     NB:
     The query effectively matches COMPARISON_OPERATIONS_STRING_TO_LIST['contains'] in filter_json.json_expression
@@ -161,34 +176,34 @@ def contains_expression(expression):
     like_statements = []
     for i in value:
         if i is not None:
-            like_statements.append(func.lower(literal_column(FILTER_COLUMN_MAPPING[field])).contains(i.lower()))
+            like_statements.append(func.lower(literal_column(get_column(field, catalog_fields))).contains(i.lower()))
     if not like_statements:
         return text("1 = 2")  # Empty lists should return always false
     # Multiple statements must be OR'ed together.
     return or_(*like_statements)
 
 
-def not_contains_expression(expression):
+def not_contains_expression(expression, catalog_fields):
     """Converts a 'not contains' expression to a sqlalchemy expression by wrapping it in a not clause.
 
     Single-value comparisons are converted to a "NOT LIKE" instead of being wrapped.
     Falsey comparisons (empty list) are rendered as "NOT 1 = 2".
     """
 
-    return not_(contains_expression(expression))
+    return not_(contains_expression(expression, catalog_fields))
 
 
 def get_field_and_lower_val(expression):
     return expression["left"]["field"], [(v.lower() if isinstance(v, basestring) else v) for v in expression["right"]["value"]]
 
 
-def in_expression(expression):
+def in_expression(expression, catalog_fields):
     field, value = get_field_and_lower_val(expression)
-    return func.lower(literal_column(FILTER_COLUMN_MAPPING[field])).in_(value)
+    return func.lower(literal_column(get_column(field, catalog_fields))).in_(value)
 
 
-def not_in_expression(expression):
-    return not_(in_expression(expression))
+def not_in_expression(expression, catalog_fields):
+    return not_(in_expression(expression, catalog_fields))
 
 
 SQL_COMPARISON_TO_PYTHON_COMPARISON = {
@@ -201,14 +216,14 @@ SQL_COMPARISON_TO_PYTHON_COMPARISON = {
 }
 
 
-def direct_sql_expression(expression):
+def direct_sql_expression(expression, catalog_fields):
     field = expression["left"]["field"]
     value = expression["right"]["value"]
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
     # iterate through each item in the list of values and getattr to invoke the right comparison function
-    statements = [getattr(literal_column(FILTER_COLUMN_MAPPING[field]), python_expr_equivalent)(literal(i)) for i in value if i is not None]\
-        if type(value) is list else [getattr(literal_column(FILTER_COLUMN_MAPPING[field]), python_expr_equivalent)(literal(value))]
+    statements = [getattr(literal_column(get_column(field, catalog_fields)), python_expr_equivalent)(literal(i)) for i in value if i is not None]\
+        if type(value) is list else [getattr(literal_column(get_column(field, catalog_fields)), python_expr_equivalent)(literal(value))]
     # Multiple statements must be OR'ed together. Empty lists should return always false (1 = 2)
     return or_(*statements) if statements else text("1 = 2")
 
@@ -231,14 +246,14 @@ FILTER_MAP = {
 }
 
 
-def convert(expression):
+def convert(expression, catalog_fields):
     expression_type = expression["type"]
-    return FILTER_MAP[expression_type](expression)
+    return FILTER_MAP[expression_type](expression, catalog_fields)
 
 
-def and_with_convert_without_null(first_expression, second_expression):
-    converted_first_expression = convert(first_expression)
-    converted_second_expression = convert(second_expression)
+def and_with_convert_without_null(first_expression, second_expression, catalog_fields):
+    converted_first_expression = convert(first_expression, catalog_fields)
+    converted_second_expression = convert(second_expression, catalog_fields)
     if converted_first_expression is None:
         return converted_second_expression
     elif converted_second_expression is None:
@@ -248,12 +263,12 @@ def and_with_convert_without_null(first_expression, second_expression):
 
 
 def get_query_and_variables(product_type_expression, non_product_type_expression, second_product_type_expression,
-                            second_non_product_type_expression):
+                            second_non_product_type_expression, catalog_fields):
     # we collate here to make sure that variable names dont get reused, e.g. "lower_1" showing up twice
     sql_expression = collate(and_with_convert_without_null(product_type_expression,
-                                                           second_product_type_expression),
+                                                           second_product_type_expression, catalog_fields),
                              and_with_convert_without_null(non_product_type_expression,
-                                                           second_non_product_type_expression))
+                                                           second_non_product_type_expression, catalog_fields))
     [early_filter, late_filter] = str(sql_expression).split(" COLLATE ")
     params = sql_expression.compile().params if sql_expression is not None else {}
     return ("AND " + early_filter) if early_filter != "NULL" else '', \
