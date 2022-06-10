@@ -1,29 +1,7 @@
 from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, literal
+from .precompute_constants import SUPPORTED_PREFILTER_FIELDS, UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, DATA_TYPE_TO_SNOWFLAKE_TYPE
 import json
 import six
-
-# NOTE: availability/availability_date/expiration_date/sale_price_effective_date_begin/sale_price_effective_date_end
-# not included so that such filters make the results update quickly
-NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
-    'shipping_label', 'description', 'shipping_height', 'mpn', 'price', 'material', 'tax', 'shipping_weight',
-    'image_link', 'color', 'link', 'adult', 'promotion_id', 'multipack', 'age_group', 'id', 'condition', 'size',
-    'shipping', 'shipping_length', 'product_type', 'energy_efficiency_class', 'title', 'gender', 'size_type',
-    'shipping_width', 'is_bundle', 'additional_image_link', 'loyalty_points', 'pattern', 'sale_price', 'mobile_link',
-    'brand', 'item_group_id', 'availability']
-SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
-UNSUPPORTED_PREFILTER_FIELDS = [
-    'retailer_id', 'dataset_id', 'id', 'availability_date', 'expiration_date', 'sale_price_effective_date_begin',
-    'sale_price_effective_date_end', 'update_time'
-]
-SUPPORTED_DATA_TYPES = [
-    'string', 'number', 'datetime', 'boolean'
-]
-DATA_TYPE_TO_SNOWFLAKE_TYPE = {
-    'string': 'string',
-    'number': 'number',
-    'datetime': 'datetime',
-    'boolean': 'boolean'
-}
 
 SUPPORTED_PREFILTER_FUNCTIONS = ['items_from_base_recommendation_on']
 
@@ -117,7 +95,7 @@ def in_expression(expression, catalog_fields):
     field, value = get_field_and_lower_val(expression)
     # product type uses == for true equality
     if expression['right']['type'] == 'function':
-        return literal_column(get_column(field, "reommendation", catalog_fields)).__eq__(literal_column(get_column(field, "context", catalog_fields)))
+        return literal_column(get_column(field, "recommendation", catalog_fields)).__eq__(literal_column(get_column(field, "context", catalog_fields)))
     return func.lower(literal_column(get_column(field, "recommendation", catalog_fields))).in_(value)
 
 
