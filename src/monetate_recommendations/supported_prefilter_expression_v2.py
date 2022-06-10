@@ -1,5 +1,7 @@
 from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, literal
 import json
+import six
+
 # NOTE: availability/availability_date/expiration_date/sale_price_effective_date_begin/sale_price_effective_date_end
 # not included so that such filters make the results update quickly
 NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
@@ -61,7 +63,7 @@ def startswith_expression(expression, catalog_fields):
     value = expression["right"]["value"]
 
     if field == "product_type" and expression["right"]["type"] == "function":
-        return text("udf_startswith(recommendation.product_type, context.product_type)")
+        return text("any_startswith_udf(recommendation.product_type, context.product_type)")
 
     like_statements = []
     for i in value:
@@ -85,7 +87,7 @@ def contains_expression(expression, catalog_fields):
     value = expression["right"]["value"]
 
     if field == "product_type" and expression["right"]["type"] == "function":
-        return text("udf_contains(recommendation.product_type, context.product_type)")
+        return text("any_contains_udf(recommendation.product_type, context.product_type)")
 
     like_statements = []
     for i in value:
@@ -108,7 +110,7 @@ def not_contains_expression(expression, catalog_fields):
 
 
 def get_field_and_lower_val(expression):
-    return expression["left"]["field"], [(v.lower() if isinstance(v, basestring) else v) for v in expression["right"]["value"]]
+    return expression["left"]["field"], [(v.lower() if isinstance(v, six.string_types) else v) for v in expression["right"]["value"]]
 
 
 def in_expression(expression, catalog_fields):
@@ -139,7 +141,7 @@ def direct_sql_expression(expression, catalog_fields):
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
     if field == 'product_type' and expression['right']['type'] == 'function':
-        return literal_column(get_column(field)).equals(literal_column(get_column(field, "context", catalog_fields)))
+        return literal_column(get_column(field, "recommendation")).__eq__(literal_column(get_column(field, "context", catalog_fields)))
     # iterate through each item in the list of values and getattr to invoke the right comparison function
     statements = [getattr(literal_column(get_column(field, "recommendation", catalog_fields)), python_expr_equivalent)(literal(i)) for i in value if i is not None]\
         if type(value) is list else [getattr(literal_column(get_column(field, "recommendation", catalog_fields)), python_expr_equivalent)(literal(value))]

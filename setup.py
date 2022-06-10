@@ -31,16 +31,16 @@ setup(
         "css-parser",
         "Django>=1.11,<2.0",
         "django-json-rpc",
-        "djangorestframework<=3.9.0",  # last verison which supports both py2 and py3
+        "djangorestframework<=3.9.0",  # last version which supports both py2 and py3
         "monetate-bandit",
         "monetate-recs",
         "aws-encryption-sdk",
         "beautifulsoup4<=4.9.3",  # The final version of Beautiful Soup to support Python 2 was 4.9.3
-        "cachetools<=3.1.1",  # last verison which supports both py2 and py3
+        "cachetools<=3.1.1",  # last version which supports both py2 and py3
         "Cerberus",
         "certifi<2021.0.0",  # is required by snowflake-connector-python
         "ciso8601",
-        "decorator<=4.1.2",  # last verison which supports both py2 and py3
+        "decorator<=4.1.2",  # last version which supports both py2 and py3
         "FormEncode",
         "googleads",
         "idna<2.9",  # is required by snowflake-connector-python, requests
@@ -52,9 +52,9 @@ setup(
         # newer versions of markupdafe ask for another version of requests which isn't compatible with python-snowflake-connector
         "MarkupSafe<=1.1.1",
         "mock<=3.0.5",
-        "mysqlclient~=1.3.14",  # last verison which supports both py2 and py3
-        "pandas<=0.23.4",  # last verison which supports both py2 and py3
-        "paramiko<=2.0.9",  # last verison which supports both py2 and py3
+        "mysqlclient~=1.3.14",  # last version which supports both py2 and py3
+        "pandas<=0.23.4",  # last version which supports both py2 and py3
+        "paramiko<=2.0.9",  # last version which supports both py2 and py3
         "pycrypto",
         "pylibmc",
         "pyOpenSSL<=18.0.0",  # dependency from sqlalchemy

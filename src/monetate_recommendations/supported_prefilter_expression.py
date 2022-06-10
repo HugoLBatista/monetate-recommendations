@@ -1,4 +1,5 @@
 from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, literal
+import six
 
 # NOTE: availability/availability_date/expiration_date/sale_price_effective_date_begin/sale_price_effective_date_end
 # not included so that such filters make the results update quickly
@@ -194,7 +195,7 @@ def not_contains_expression(expression, catalog_fields):
 
 
 def get_field_and_lower_val(expression):
-    return expression["left"]["field"], [(v.lower() if isinstance(v, basestring) else v) for v in expression["right"]["value"]]
+    return expression["left"]["field"], [(v.lower() if isinstance(v, six.string_types) else v) for v in expression["right"]["value"]]
 
 
 def in_expression(expression, catalog_fields):
@@ -262,13 +263,14 @@ def and_with_convert_without_null(first_expression, second_expression, catalog_f
         return and_(converted_first_expression, converted_second_expression)
 
 
-def get_query_and_variables(product_type_expression, non_product_type_expression, second_product_type_expression,
-                            second_non_product_type_expression, catalog_fields):
+# non_product_type expressions are the early filter, product_type expressions are the late filter
+def get_query_and_variables(non_product_type_expression, product_type_expression, second_non_product_type_expression,
+                            second_product_type_expression, catalog_fields):
     # we collate here to make sure that variable names dont get reused, e.g. "lower_1" showing up twice
-    sql_expression = collate(and_with_convert_without_null(product_type_expression,
-                                                           second_product_type_expression, catalog_fields),
-                             and_with_convert_without_null(non_product_type_expression,
-                                                           second_non_product_type_expression, catalog_fields))
+    sql_expression = collate(and_with_convert_without_null(non_product_type_expression,
+                                                           second_non_product_type_expression, catalog_fields),
+                             and_with_convert_without_null(product_type_expression,
+                                                           second_product_type_expression, catalog_fields))
     [early_filter, late_filter] = str(sql_expression).split(" COLLATE ")
     params = sql_expression.compile().params if sql_expression is not None else {}
     return ("AND " + early_filter) if early_filter != "NULL" else '', \

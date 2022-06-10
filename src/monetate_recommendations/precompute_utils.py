@@ -20,6 +20,7 @@ import monetate.dio.models as dio_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
+from monetate_recommendations import supported_weights_expression
 from .supported_prefilter_expression import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, FILTER_MAP
 
 DATA_JURISDICTION = 'recs_global'
@@ -115,7 +116,6 @@ FROM (
     FROM scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
     WHERE ordinal <= 10000
     GROUP BY lookup_key
-    
 )
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
@@ -129,7 +129,6 @@ SELECT filtered_scored_records.*,
 FROM filtered_scored_records,
 LATERAL FLATTEN(input=>ARRAY_APPEND(SPLIT(product_type, ','), '')) split_product_type
 """
-
 
 STATIC_FILTER_RANKS = """
 SELECT filtered_scored_records.*,
@@ -258,7 +257,6 @@ score_scaling AS (
         )
 JOIN score_scaling"""
 
-
 SKU_RANKS_BY_COLLAB_RECSET = """
 CREATE TEMPORARY TABLE scratch.recset_{account_id}_{recset_id}_ranks AS
 WITH 
@@ -298,7 +296,6 @@ WITH
         FROM sku_algo
     )
     WHERE rank <= 50
-    
 """
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
 # example  6814_None_None
@@ -308,21 +305,21 @@ SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, max(fact_time) as fac
 FROM m_dedup_purchase_line
 WHERE account_id in (:account_ids)
     AND fact_time >= :begin_fact_time
+    /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
+    AND product_id NOT IN ('', 'null', 'NULL')
 GROUP BY 1, 2, 3, 4, 5
 """
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
 # example  6814_None_None
-GET_LAST_VIEW_PER_MID_AND_PID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.last_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+GET_EARLIEST_VIEW_PER_MID_AND_PID = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 WITH device_earliest_product_view AS (
-    SELECT fact_product_view.account_id, mid_epoch, mid_ts, mid_rnd, product_id, min(fact_time) fact_time
+    SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, min(fact_time) fact_time
     FROM fact_product_view
-    /* ignore views whose pids are not in catalog so invalid pids coming in on view facts do not get into the results */
-    JOIN config_account ON (fact_product_view.account_id = config_account.account_id)
-    JOIN product_catalog ON (fact_product_view.product_id = product_catalog.item_group_id
-        AND config_account.retailer_id = product_catalog.retailer_id)
-    WHERE fact_product_view.account_id in (:account_ids) AND
-        fact_time >= :begin_fact_time
+    WHERE account_id in (:account_ids)
+        AND fact_time >= :begin_fact_time
+        /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
+        AND product_id NOT IN ('', 'null', 'NULL')
     GROUP BY 1, 2, 3, 4, 5
 ),
 filtered_devices AS (
@@ -341,28 +338,13 @@ JOIN filtered_devices fd
     AND fd.mid_rnd = p.mid_rnd
 """
 
-UDF_CONTAINS = """
-CREATE OR REPLACE TEMPORARY FUNCTION udf_contains(c string,t string)
-  RETURNS boolean
-  LANGUAGE JAVASCRIPT
-AS
-'
-  product_type_arr = C.split(",").map(a => a.trim()) 
-  return product_type_arr.some(prod_type => T.includes(prod_type));
-';
+# Retrieving the products only if they are available in stock for the given retailer
+GET_RETAILER_PRODUCT_CATALOG = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+SELECT *
+FROM product_catalog
+WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability)=lower(:availability)
 """
-
-UDF_STARTSWITH = """
-CREATE OR REPLACE TEMPORARY FUNCTION udf_startswith(c string,t string)
-  RETURNS boolean
-  LANGUAGE JAVASCRIPT
-AS
-'
-  product_type_arr = C.split(",").map(a => a.trim()) 
-  return product_type_arr.some(prod_type => T.startsWith(prod_type));
-';
-"""
-
 
 def parse_supported_filters(filter_json, catalog_fields):
     def _filter_product_type(f):
@@ -433,17 +415,27 @@ def get_fact_time(lookback):
     return begin_fact_time, end_fact_time
 
 
-def create_helper_query(conn, accounts, lookback, algorithm, query):
+def create_helper_query(conn, accounts_to_process, lookback, algorithm, account, query):
     begin_fact_time, end_fact_time = get_fact_time(lookback)
     if algorithm == 'purchase_also_purchase':
-        conn.execute(query, account_ids=accounts, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time)
+        conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+                     end_fact_time=end_fact_time)
     elif algorithm == 'view_also_view':
-        conn.execute(query, account_ids=accounts, begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
-                     lookback=lookback)
-
+        conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+                     end_fact_time=end_fact_time, lookback=lookback)
+    elif algorithm == 'similar_products_v2':
+        # for similar product algo we always expect the account id to be present. since we dont support
+        # market
+        # we want to fail if the account is None
+        if account is None:
+            raise ValueError('Account has no Account ID for similar products execution, using None')
+        retailer_id = account.retailer_id
+        dataset_id = dio_models.DefaultAccountCatalog.objects.get(account=account.id).schema.id
+        #TODO: availability is Adidas specific, need to change in the future to support all clients
+        availability = "In Stock"
+        conn.execute(query, retailer_id=retailer_id, dataset_id=dataset_id, availability=availability)
 
 def create_metric_table(conn, account_ids, lookback, algorithm, query):
-
     begin_fact_time, end_fact_time = get_fact_time(lookback)
     begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
         begin_fact_time, end_fact_time)
@@ -769,13 +761,38 @@ def get_account_ids_for_catalog_join_and_output(recset, queue_account):
             return [recset.account]
     return []
 
+def get_similar_products_weights(account, market, retailer, lookback_days):
+    recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account)
+    weights_json = json.loads(recommendation_settings[0].similar_product_weights_json) if recommendation_settings else None
+    if weights_json is None:
+        raise ValueError('Account {} has no weights JSON for similar products execution, using None'.format(account))
+    weights_json = weights_json["enabled_catalog_attributes"]
+    catalog_id = dio_models.DefaultAccountCatalog.objects.get(account=account).schema.id
+    weights_sql, selected_attributes = supported_weights_expression.get_weights_query(weights_json, catalog_id, \
+                                                                                      account, market, retailer,
+                                                                                      lookback_days)
+    return weights_sql, selected_attributes
+
+
+def run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count):
+    if algorithm == 'similar_products_v2':
+        weights_sql, selected_attributes = get_similar_products_weights(account, market, retailer, lookback_days)
+        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days,
+                                                    weights=weights_sql, selected_attributes=selected_attributes
+                                                    )))
+    else:
+        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days)),
+                     minimum_count=min_count)
+
 
 def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
     result_counts = []
     # since the queue table currently has accounts that do not have the precompute collab feature flag
     # we don't want to process these queue entries
     if recset_group.account and \
-        not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
+            not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
         log.log_info("skipping results for recset group with id {} - does not have collab feature flag"
                      .format(recset_group.id))
         return result_counts
@@ -787,9 +804,8 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     log.log_info('Querying results for recset group {}'.format(recset_group.id))
     log.log_info("Processing algorithm {}, lookback {}".format(algorithm, lookback_days))
     account_ids = get_account_ids_for_processing(recset_group)
-
     # this query creates a temp table with all the purchases or views in given lookback period
-    create_helper_query(conn, account_ids, lookback_days, algorithm,
+    create_helper_query(conn, account_ids, lookback_days, algorithm, recset_group.account,
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)))
     # if pap, account level, and account has min threshold feature flag use min threshold else set min_count to 1
@@ -799,12 +815,11 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
            and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) \
            and algorithm == 'purchase_also_purchase' else 1
     # this query creates a pid pid relation with a score
-    conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                retailer_id=retailer, lookback_days=lookback_days)),
-                 minimum_count=min_count)
+    run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count)
+
     # this query add normalized score
     conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
-                                                        lookback_days=lookback_days,  market_id=market,
+                                                        lookback_days=lookback_days, market_id=market,
                                                         retailer_id=retailer,
                                                         )))
     # commenting out as previous plans of plans of pursuing different architecture not on roadmap at least for now
@@ -819,9 +834,6 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     #              target=unload_pid_path,
     #              algorithm=algorithm,
     #              lookback_days=lookback_days)
-    # Initializing udf functions for applying product_type dynamic filters
-    conn.execute(text(UDF_CONTAINS))
-    conn.execute(text(UDF_STARTSWITH))
 
     recsets = get_recset_ids(recset_group)
     for recset in recsets:
@@ -866,7 +878,3 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
             log.log_info("Finished processing recset id {}, account id {}".format(recset.id, account_id))
 
     return result_counts
-
-
-
-
