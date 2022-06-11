@@ -721,7 +721,7 @@ def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_quer
     with job_timing.job_timer('precompute_{}_algorithm'.format(algorithm)),\
             contextlib.closing(engine.connect()) as warehouse_conn:
         warehouse_conn.execute("use warehouse {}".format(
-            getattr(settings, 'RECS_COLLAB_QUERY_WH', os.environ.get('RECS_COLLAB_QUERY_WH', 'QUERY8_WH'))))
+            getattr(settings, 'RECS_COLLAB_QUERY_WH', os.environ.get('RECS_COLLAB_QUERY_WH', 'QUERY4_WH'))))
         for recset_group in recsets_group:
             if recset_group and recset_group.algorithm == algorithm:
                 log.log_info('processing recset {}'.format(recset_group.id))
