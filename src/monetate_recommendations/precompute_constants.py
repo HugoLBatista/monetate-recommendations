@@ -11,6 +11,7 @@ UNSUPPORTED_PREFILTER_FIELDS = [
     'retailer_id', 'dataset_id', 'availability_date', 'expiration_date', 'sale_price_effective_date_begin',
     'sale_price_effective_date_end', 'update_time'
 ]
+SUPPORTED_PREFILTER_FUNCTIONS = ['items_from_base_recommendation_on']
 SUPPORTED_DATA_TYPES = [
     'string', 'number', 'datetime', 'boolean'
 ]

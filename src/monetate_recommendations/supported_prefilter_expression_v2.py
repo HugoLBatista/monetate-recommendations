@@ -1,9 +1,8 @@
 from sqlalchemy import and_, literal_column, not_, or_, text, func, collate, literal
-from .precompute_constants import SUPPORTED_PREFILTER_FIELDS, UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, DATA_TYPE_TO_SNOWFLAKE_TYPE
+from .precompute_constants import SUPPORTED_PREFILTER_FIELDS, SUPPORTED_PREFILTER_FUNCTIONS, \
+    UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, DATA_TYPE_TO_SNOWFLAKE_TYPE
 import json
 import six
-
-SUPPORTED_PREFILTER_FUNCTIONS = ['items_from_base_recommendation_on']
 
 
 def get_column(field, prefix, catalog_fields):
