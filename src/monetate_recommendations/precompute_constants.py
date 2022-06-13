@@ -8,7 +8,7 @@ NON_PRODUCT_TYPE_PREFILTER_FIELDS = [
     'brand', 'item_group_id', 'availability']
 SUPPORTED_PREFILTER_FIELDS = NON_PRODUCT_TYPE_PREFILTER_FIELDS + ['product_type']
 UNSUPPORTED_PREFILTER_FIELDS = [
-    'retailer_id', 'dataset_id', 'id', 'availability_date', 'expiration_date', 'sale_price_effective_date_begin',
+    'retailer_id', 'dataset_id', 'availability_date', 'expiration_date', 'sale_price_effective_date_begin',
     'sale_price_effective_date_end', 'update_time'
 ]
 SUPPORTED_DATA_TYPES = [

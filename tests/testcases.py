@@ -47,7 +47,8 @@ catalog_fields = [{'name': 'id', 'data_type': 'STRING'},
                   {'name': 'brand', 'data_type': 'STRING'},
                   {'name': 'mpn', 'data_type': 'STRING'},
                   {'name': 'condition', 'data_type': 'STRING'},
-                  {'name': 'adult', 'data_type': 'BOOLEAN'}]
+                  {'name': 'adult', 'data_type': 'BOOLEAN'},
+                  {'name': 'is_bundle', 'data_type': 'BOOLEAN'}]
 
 
 class SimpleQSMock(object):
