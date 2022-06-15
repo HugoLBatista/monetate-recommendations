@@ -8,11 +8,13 @@ import monetate.dio.models as dio_models
 
 
 class Command(BaseCommand):
-    help = "Run precompute processes by recset id"
+    help = "Upload catalog and non precompute recsets to intbox"
 
     def add_arguments(self, parser):
         parser.add_argument('--account_ids', default=None, dest='account_ids', nargs='+',
                             help='process all recs (collab and noncollab) for account', type=int)
+        parser.add_argument('--recsets', default=True, type=bool,
+                            help='uploads the recsets as well, if False will only upload the default catalog')
 
     def handle(self, *args, **options):
         def _enqueue(schema_ids, retailer_id, command_time):
@@ -45,19 +47,21 @@ class Command(BaseCommand):
             )
 
             catalog_ids = [dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id]
+            upload_recs = options.get('recsets')
             dataset_ids = []
-
-            for recset in recsets:
-                if recset.algorithm != 'onboarded':
-                    if recset.product_catalog:
-                        catalog_ids.append(recset.product_catalog.id)
-                    if recset.dataset:
-                        dataset_ids.append(recset.dataset.id)
-                    if recset.dataset is None and \
-                            recset.algorithm not in RecommendationSet.ALGORITHMS_ALLOWING_NULL_DATASET:
-                        dataset_id = RecommendationSetDataset.objects.get(recommendation_set_id=recset,
-                                                                       account_id=account_id).dataset_id
-                        dataset_ids.append(dataset_id)
+            if upload_recs:
+                for recset in recsets:
+                    if recset.algorithm != 'onboarded':
+                        if recset.product_catalog:
+                            catalog_ids.append(recset.product_catalog.id)
+                        if recset.dataset:
+                            dataset_ids.append(recset.dataset.id)
+                        # adding global recsets here
+                        elif recset.dataset is None and \
+                                recset.algorithm not in RecommendationSet.ALGORITHMS_ALLOWING_NULL_DATASET:
+                            dataset_id = RecommendationSetDataset.objects.get(recommendation_set_id=recset,
+                                                                           account_id=account_id).dataset_id
+                            dataset_ids.append(dataset_id)
             print('catalog ids: {}'.format(set(catalog_ids)))
             print('dataset ids: {}'.format(set(dataset_ids)))
             _enqueue(catalog_ids, retailer.id, now)
