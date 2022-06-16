@@ -15,6 +15,8 @@ SUPPORTED_PREFILTER_FUNCTIONS = ['items_from_base_recommendation_on']
 SUPPORTED_DATA_TYPES = [
     'string', 'number', 'datetime', 'boolean'
 ]
+
+# currently not supporting multistring and google_product_category
 DATA_TYPE_TO_SNOWFLAKE_TYPE = {
     'string': 'string',
     'number': 'number',
