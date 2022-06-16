@@ -358,6 +358,8 @@ def parse_supported_filters(filter_json, catalog_fields):
         return f['right']['type'] != 'function'
 
     def _filter_supported_static_filter(f):
+        # Removing catalog fields that we dont support such as custom attributes 
+        # with datatype as "multistring" or "google_product_category"
         catalog_field = next((catalog_field for catalog_field in catalog_fields if
                               catalog_field["name"].lower() == f['left']['field'].lower()), None)
         return f['left']['field'].lower() not in UNSUPPORTED_PREFILTER_FIELDS and f['right']['type'] != 'function' and \
@@ -366,7 +368,8 @@ def parse_supported_filters(filter_json, catalog_fields):
     # a filter is supported if:
     #   1. it is in the list of supported prefilter fields AND
     #   2. the filter type (equal to, starts with, etc) is supported AND
-    #   3. it is a product_type field OR it is a constant (not a function = constant)
+    #   3. it is a product_type field OR it is a constant (not a function = constant) AND 
+    #   4. the datatype is a supported data type
     def _filter_supported_filters(f):
         catalog_field = next((catalog_field for catalog_field in catalog_fields if
                               catalog_field["name"].lower() == f['left']['field'].lower()), None)
@@ -678,9 +681,13 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         else:
             log.log_debug("Account has no recommendation settings, using default of empty filter_json")
             global_filter_json = u'{"type": "or", "filters": []}'
-        catalog_id = recset.product_catalog.id if recset.product_catalog else \
-            dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
-        catalog_fields = dio_models.Schema.objects.get(id=catalog_id).active_field_set.values("name", "data_type")
+        try:
+            catalog_id = recset.product_catalog.id if recset.product_catalog else \
+                dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+            catalog_fields = dio_models.Schema.objects.get(id=catalog_id).active_field_set.values("name", "data_type")
+        except:
+            log.log_info("Skipping account id {}, no catalog set".format(account_id))
+            continue
         early_filter_exp, late_filter_exp, has_dynamic_filter = parse_supported_filters(recset.filter_json,
                                                                                         catalog_fields)
         global_early_filter_exp, global_late_filter_exp, global_has_dynamic_filter = \

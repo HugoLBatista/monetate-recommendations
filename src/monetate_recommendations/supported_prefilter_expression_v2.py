@@ -4,7 +4,8 @@ from .precompute_constants import SUPPORTED_PREFILTER_FIELDS, SUPPORTED_PREFILTE
 import json
 import six
 
-
+# we need to cast the data type for custom catalog attributes since the columns are 
+# stored in the variant column in snowflake
 def get_column(field, prefix, catalog_fields):
     catalog_field = next(catalog_field for catalog_field in catalog_fields if catalog_field["name"].lower() == field)
     return (prefix + "." + field) if field in SUPPORTED_PREFILTER_FIELDS else\
