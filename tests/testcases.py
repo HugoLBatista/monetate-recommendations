@@ -28,7 +28,38 @@ from tests import patch_invalidations
 
 testcases.snowflake_schema_path = os.path.join(os.path.abspath(os.path.join(os.getcwd(), '..', '..')), 'ec2-user',
                                                'monetate-server', 'snowflake', 'tables', 'public')
+catalog_fields = [{'name': 'id', 'data_type': 'STRING'},
+                  {'name': 'title', 'data_type': 'STRING'},
+                  {'name': 'description', 'data_type': 'STRING'},
+                  {'name': 'link', 'data_type': 'STRING'},
+                  {'name': 'image_link', 'data_type': 'STRING'},
+                  {'name': 'additional_image_link', 'data_type': 'STRING'},
+                  {'name': 'mobile_link', 'data_type': 'STRING'},
+                  {'name': 'availability', 'data_type': 'STRING'},
+                  {'name': 'availability_date', 'data_type': 'DATETIME'},
+                  {'name': 'expiration_date', 'data_type': 'DATETIME'},
+                  {'name': 'price', 'data_type': 'NUMBER'},
+                  {'name': 'sale_price', 'data_type': 'NUMBER'},
+                  {'name': 'sale_price_effective_date_begin', 'data_type': 'DATETIME'},
+                  {'name': 'sale_price_effective_date_end', 'data_type': 'DATETIME'},
+                  {'name': 'loyalty_points', 'data_type': 'STRING'},
+                  {'name': 'product_type', 'data_type': 'STRING'},
+                  {'name': 'brand', 'data_type': 'STRING'},
+                  {'name': 'mpn', 'data_type': 'STRING'},
+                  {'name': 'condition', 'data_type': 'STRING'},
+                  {'name': 'adult', 'data_type': 'BOOLEAN'},
+                  {'name': 'is_bundle', 'data_type': 'BOOLEAN'}]
 
+
+class SimpleQSMock(object):
+    def __init__(self, cf):
+        self.cf = cf
+
+    def values(self, ignoreA, ignoreB):
+        return self.cf
+
+
+simpleQSMock = SimpleQSMock(catalog_fields)
 
 class RecsTestCase(SnowflakeTestCase):
     conn = None  # Calm sonar complaints about missing class member (it's set in superclass)
@@ -157,6 +188,7 @@ class RecsTestCase(SnowflakeTestCase):
 
         with mock.patch('monetate.common.job_timing.record_job_timing'),\
              mock.patch('contextlib.closing', return_value=self.conn),\
+             mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
              mock.patch('sqlalchemy.engine.Connection.close'),\
              mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
                         autospec=True) as mock_suffix,\
@@ -326,6 +358,7 @@ class RecsTestCaseWithData(RecsTestCase):
             s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
                 mock.patch('contextlib.closing', return_value=self.conn), \
+                mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
                 mock.patch('sqlalchemy.engine.Connection.close'), \
                 mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
                            autospec=True) as mock_suffix, \

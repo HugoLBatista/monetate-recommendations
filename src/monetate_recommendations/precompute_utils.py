@@ -21,7 +21,8 @@ from monetate.recs.models import RecommendationSet, RecommendationSetDataset, Ac
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
 from monetate_recommendations import supported_weights_expression
-from .supported_prefilter_expression import SUPPORTED_PREFILTER_FIELDS, FILTER_MAP
+from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES
+from .supported_prefilter_expression import FILTER_MAP
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -346,7 +347,7 @@ FROM product_catalog
 WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability)=lower(:availability)
 """
 
-def parse_supported_filters(filter_json):
+def parse_supported_filters(filter_json, catalog_fields):
     def _filter_product_type(f):
         return f['left']['field'] == 'product_type'
 
@@ -357,19 +358,29 @@ def parse_supported_filters(filter_json):
         return f['right']['type'] != 'function'
 
     def _filter_supported_static_filter(f):
-        return f['left']['field'].lower() in SUPPORTED_PREFILTER_FIELDS and f['right']['type'] != 'function'
+        # Removing catalog fields that we dont support such as custom attributes 
+        # with datatype as "multistring" or "google_product_category"
+        catalog_field = next((catalog_field for catalog_field in catalog_fields if
+                              catalog_field["name"].lower() == f['left']['field'].lower()), None)
+        return f['left']['field'].lower() not in UNSUPPORTED_PREFILTER_FIELDS and f['right']['type'] != 'function' and \
+            catalog_field and catalog_field["data_type"].lower() in SUPPORTED_DATA_TYPES
 
     # a filter is supported if:
     #   1. it is in the list of supported prefilter fields AND
     #   2. the filter type (equal to, starts with, etc) is supported AND
-    #   3. it is a product_type field OR it is a constant (not a function = constant)
+    #   3. it is a product_type field OR it is a constant (not a function = constant) AND 
+    #   4. the datatype is a supported data type
     def _filter_supported_filters(f):
+        catalog_field = next((catalog_field for catalog_field in catalog_fields if
+                              catalog_field["name"].lower() == f['left']['field'].lower()), None)
         return (
-                f['left']['field'].lower() in SUPPORTED_PREFILTER_FIELDS
+                f['left']['field'].lower() not in UNSUPPORTED_PREFILTER_FIELDS
         ) and (
                 f['type'] in FILTER_MAP
         ) and (
                 f['right']['type'] != 'function' or f['left']['field'] == 'product_type'
+        ) and (
+            catalog_field and catalog_field["data_type"].lower() in SUPPORTED_DATA_TYPES
         )
 
     filter_dict = json.loads(filter_json)
@@ -670,14 +681,20 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         else:
             log.log_debug("Account has no recommendation settings, using default of empty filter_json")
             global_filter_json = u'{"type": "or", "filters": []}'
-        early_filter_exp, late_filter_exp, has_dynamic_filter = parse_supported_filters(recset.filter_json)
+        try:
+            catalog_id = recset.product_catalog.id if recset.product_catalog else \
+                dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+            catalog_fields = dio_models.Schema.objects.get(id=catalog_id).active_field_set.values("name", "data_type")
+        except:
+            log.log_info("Skipping account id {}, no catalog set".format(account_id))
+            continue
+        early_filter_exp, late_filter_exp, has_dynamic_filter = parse_supported_filters(recset.filter_json,
+                                                                                        catalog_fields)
         global_early_filter_exp, global_late_filter_exp, global_has_dynamic_filter = \
-            parse_supported_filters(global_filter_json)
+            parse_supported_filters(global_filter_json, catalog_fields)
         has_dynamic_filter = has_dynamic_filter or global_has_dynamic_filter
         early_filter_sql, late_filter_sql, filter_variables = supported_prefilter_expression.get_query_and_variables(
-            early_filter_exp, late_filter_exp, global_early_filter_exp, global_late_filter_exp)
-        catalog_id = recset.product_catalog.id if recset.product_catalog else \
-            dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+            early_filter_exp, late_filter_exp, global_early_filter_exp, global_late_filter_exp, catalog_fields)
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
         create_metric_table(conn, account_ids, recset.lookback_days, recset.algorithm,
                             text(metric_table_query.format(algorithm=recset.algorithm,
@@ -833,13 +850,15 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
             log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
             global_filter_json = recommendation_settings[0].filter_json if recommendation_settings else u'{"type":"or","filters":[]}'
-            filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json)
+
             try:
                 catalog_id = recset.product_catalog.id if recset.product_catalog else \
                     dio_models.DefaultAccountCatalog.objects.get(account=account_id).schema.id
+                catalog_fields = dio_models.Schema.objects.get(id=catalog_id).active_field_set.values("name", "data_type")
             except dio_models.DefaultAccountCatalog.DoesNotExist:
                 log.log_info("Skipping {} with account id {}, no catalog set found".format(account_id, account_id.id))
                 continue
+            filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json, catalog_fields)
             # this query explodes the pid to sku to create a pid-sku relation
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,

@@ -32,7 +32,17 @@ class PrecomputeUtilsTestCase(TestCase):
                 "type": "startswith",
                 "left": {
                     "type": "field",
-                    "field": "brandabc"  # tests that we exclude fields which we don't recognize
+                    "field": "brandabc"  # tests that we exclude fields which we don't support
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Monetate"]
+                }
+            },  {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "customstring"  # tests that we include valid custom fields
                 },
                 "right": {
                     "type": "value",
@@ -40,7 +50,21 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        catalog_fields = [
+            {
+                'name': 'product_type',
+                'data_type': 'string'
+            },
+            {
+                'name': 'brand',
+                'data_type': 'string'
+            },
+            {
+                'name': 'customstring',
+                'data_type': 'string'
+            }
+        ]
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
         expected_early = {
             "type": "and",
             "filters": [{
@@ -48,6 +72,16 @@ class PrecomputeUtilsTestCase(TestCase):
                 "left": {
                     "type": "field",
                     "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Monetate"]
+                }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "customstring"
                 },
                 "right": {
                     "type": "value",
@@ -78,7 +112,7 @@ class PrecomputeUtilsTestCase(TestCase):
             "type": "and",
             "filters": []
         })
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, [])
         expected = {
             "type": "and",
             "filters": []
@@ -104,7 +138,13 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        catalog_fields = [
+            {
+                'name': 'product_type',
+                'data_type': 'string'
+            }
+        ]
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
         expected = {
             "type": "and",
             "filters": []
@@ -138,7 +178,13 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        catalog_fields = [
+            {
+                'name': 'product_type',
+                'data_type': 'string'
+            }
+        ]
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
         expected = {
             "type": "or",
             "filters": [{
@@ -198,7 +244,17 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        catalog_fields = [
+            {
+                'name': 'product_type',
+                'data_type': 'string'
+            },
+            {
+                'name': 'brand',
+                'data_type': 'string'
+            }
+        ]
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
         expected = {
             "type": "or",
             "filters": []
@@ -234,7 +290,17 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
             }]
         })
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json)
+        catalog_fields = [
+            {
+                'name': 'product_type',
+                'data_type': 'string'
+            },
+            {
+                'name': 'brand',
+                'data_type': 'string'
+            }
+        ]
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
         expected = {
             "type": "and",
             "filters": [{
