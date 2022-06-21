@@ -6,7 +6,8 @@ import six
 def get_column(field, catalog_fields):
     if field == 'product_type':
         return 'product_type'
-    catalog_field = next(catalog_field for catalog_field in catalog_fields if catalog_field["name"].lower() == field)
+    catalog_field = next(catalog_field for catalog_field in catalog_fields
+                         if catalog_field["name"].lower() == field.lower())
     return ("c." + field) if field in SUPPORTED_PREFILTER_FIELDS else \
         ("c.custom:" + field + "::" + DATA_TYPE_TO_SNOWFLAKE_TYPE[catalog_field["data_type"].lower()])
 

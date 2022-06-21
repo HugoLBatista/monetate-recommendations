@@ -7,7 +7,8 @@ import six
 # we need to cast the data type for custom catalog attributes since the columns are 
 # stored in the variant column in snowflake
 def get_column(field, prefix, catalog_fields):
-    catalog_field = next(catalog_field for catalog_field in catalog_fields if catalog_field["name"].lower() == field)
+    catalog_field = next(catalog_field for catalog_field in catalog_fields
+                         if catalog_field["name"].lower() == field.lower())
     return (prefix + "." + field) if field in SUPPORTED_PREFILTER_FIELDS else\
         (prefix + ".custom:" + field + "::" + DATA_TYPE_TO_SNOWFLAKE_TYPE[catalog_field["data_type"].lower()])
 
@@ -151,7 +152,8 @@ def convert(expression, catalog_fields):
 
 def is_supported_collab_filter(f, catalog_fields):
     field = f['left']['field'].lower()
-    catalog_field = next((catalog_field for catalog_field in catalog_fields if catalog_field["name"].lower() == field), None)
+    catalog_field = next((catalog_field for catalog_field in catalog_fields
+                          if catalog_field["name"].lower() == field.lower()), None)
     is_supported_field = (field not in UNSUPPORTED_PREFILTER_FIELDS) and catalog_field and catalog_field["data_type"].lower() in SUPPORTED_DATA_TYPES
     is_supported_function = f['right']['type'] != 'function' or f['right']['value'] in SUPPORTED_PREFILTER_FUNCTIONS
     return is_supported_field and is_supported_function

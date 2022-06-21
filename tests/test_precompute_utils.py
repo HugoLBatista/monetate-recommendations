@@ -121,6 +121,50 @@ class PrecomputeUtilsTestCase(TestCase):
         self.assertEqual(early_filter, expected)
         self.assertFalse(has_dynamic)
 
+    def test_case_sensitivity_filter(self):
+        filter_json = json.dumps({
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "CustomField"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }]
+        })
+        catalog_fields = [
+            {
+                'name': 'CustomField',
+                'data_type': 'string'
+            }
+        ]
+        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
+        expected = {
+            "type": "and",
+            "filters": []
+        }
+        expected_early = {
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "CustomField"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }]
+        }
+        self.assertEqual(result, expected)
+        self.assertEqual(early_filter, expected_early)
+        self.assertFalse(has_dynamic)
+
     def test_parse_product_type_filter_dynamic(self):
         filter_json = json.dumps({
             "type": "and",
