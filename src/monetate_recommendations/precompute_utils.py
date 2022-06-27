@@ -42,7 +42,7 @@ FROM (
         'document', object_construct(
             'pushdown_filter_hash', sha1(LOWER(CONCAT('product_type=', {dynamic_product_type} {geo_hash_sql}))),
             'data', (
-                array_agg(object_construct('ID', id, 'NORMALIZED_SCORE', score, 'RANK', rank))
+                array_agg(object_construct('id', id, 'normalized_score', score, 'rank', rank))
                 WITHIN GROUP (ORDER BY rank ASC)
             )
         ),
