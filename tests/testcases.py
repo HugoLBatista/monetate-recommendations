@@ -216,8 +216,8 @@ class RecsTestCase(SnowflakeTestCase):
 
             # records match expected
             for i, item in enumerate(expected_result):
-                self.assertEqual(item[0], actual_result['document']['data'][i]['ID'])
-                self.assertEqual(item[1], actual_result['document']['data'][i]['RANK'])
+                self.assertEqual(item[0], actual_result['document']['data'][i]['id'])
+                self.assertEqual(item[1], actual_result['document']['data'][i]['rank'])
 
     @classmethod
     def _setup_market(cls, setup):
