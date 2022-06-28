@@ -48,40 +48,10 @@ catalog_fields = [{'name': 'id', 'data_type': 'STRING'},
                   {'name': 'mpn', 'data_type': 'STRING'},
                   {'name': 'condition', 'data_type': 'STRING'},
                   {'name': 'adult', 'data_type': 'BOOLEAN'},
-                  {'name': 'is_bundle', 'data_type': 'BOOLEAN'}]
-
-catalog_fields = [{'name': 'id', 'data_type': 'STRING'},
-                  {'name': 'title', 'data_type': 'STRING'},
-                  {'name': 'description', 'data_type': 'STRING'},
-                  {'name': 'link', 'data_type': 'STRING'},
-                  {'name': 'image_link', 'data_type': 'STRING'},
-                  {'name': 'additional_image_link', 'data_type': 'STRING'},
-                  {'name': 'mobile_link', 'data_type': 'STRING'},
-                  {'name': 'availability', 'data_type': 'STRING'},
-                  {'name': 'availability_date', 'data_type': 'DATETIME'},
-                  {'name': 'expiration_date', 'data_type': 'DATETIME'},
-                  {'name': 'price', 'data_type': 'NUMBER'},
-                  {'name': 'sale_price', 'data_type': 'NUMBER'},
-                  {'name': 'sale_price_effective_date_begin', 'data_type': 'DATETIME'},
-                  {'name': 'sale_price_effective_date_end', 'data_type': 'DATETIME'},
-                  {'name': 'loyalty_points', 'data_type': 'STRING'},
-                  {'name': 'product_type', 'data_type': 'STRING'},
-                  {'name': 'brand', 'data_type': 'STRING'},
-                  {'name': 'mpn', 'data_type': 'STRING'},
-                  {'name': 'condition', 'data_type': 'STRING'},
-                  {'name': 'adult', 'data_type': 'BOOLEAN'},
                   {'name': 'is_bundle', 'data_type': 'BOOLEAN'},
                   {'name': 'color', 'data_type': 'STRING'},
                   {'name': 'product_category', 'data_type': 'STRING'}]
 
-class SimpleQSMock(object):
-    def __init__(self, cf):
-        self.cf = cf
-
-    def values(self, ignoreA, ignoreB):
-        return self.cf
-
-simpleQSMock = SimpleQSMock(catalog_fields)
 
 class SimpleQSMock(object):
     def __init__(self, cf):
@@ -89,7 +59,6 @@ class SimpleQSMock(object):
 
     def values(self, ignoreA, ignoreB):
         return self.cf
-
 
 simpleQSMock = SimpleQSMock(catalog_fields)
 
@@ -146,7 +115,6 @@ class RecsTestCase(SnowflakeTestCase):
             (cls.account.id, cls.account.name, 'p', 'example.com', 'EST', 'USD', 0, None,
              cls.account.retailer.id, cls.account.retailer.name)
         )
-        var = json.dumps({"student": 5})
         cls.conn.execute(
             """
             INSERT INTO product_catalog
@@ -163,8 +131,7 @@ class RecsTestCase(SnowflakeTestCase):
              True, 'black', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00003', 'test', 'http://monetate.com/SKU-00003.jpg',
              'TP-00003', 'http://monetate.com/3', 3.99, 'Clothing > Pants', 'Jean Pants', update_time, "cd", True,
-             'red',
-             'In Stock', None),
+             'red', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00004', 'test', 'http://monetate.com/SKU-00004.jpg',
              'TP-00004', 'http://monetate.com/4', 4.99, 'test ,    Clothing > Jeans', 'Jean Pants', update_time, "de",
              False, 'red', 'In Stock', None),
@@ -210,7 +177,7 @@ class RecsTestCase(SnowflakeTestCase):
         recs_models.AccountRecommendationSetting.objects.create(
             account=self.account,
             lookback=lookback,
-            filter_json='{"type": "or", "filters": []}'
+            filter_json='{"type": "or", "filters": []}',
         )
 
         with invalidation_context():
@@ -394,7 +361,7 @@ class RecsTestCaseWithData(RecsTestCase):
                 market=market,
                 retailer=retailer,
                 algorithm=algorithm,
-                lookback_days=lookback
+                lookback_days=lookback,
             )
 
         # Insert row into config to mock out the similar_product_weights_json setting
