@@ -64,7 +64,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
+        early_filter, result, has_dynamic = precompute_utils.parse_non_collab_filters(filter_json, catalog_fields)
         expected_early = {
             "type": "and",
             "filters": [{
@@ -112,7 +112,7 @@ class PrecomputeUtilsTestCase(TestCase):
             "type": "and",
             "filters": []
         })
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, [])
+        early_filter, result, has_dynamic = precompute_utils.parse_non_collab_filters(filter_json, [])
         expected = {
             "type": "and",
             "filters": []
@@ -142,7 +142,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
+        early_filter, result, has_dynamic = precompute_utils.parse_non_collab_filters(filter_json, catalog_fields)
         expected = {
             "type": "and",
             "filters": []
@@ -188,7 +188,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
+        early_filter, result, has_dynamic = precompute_utils.parse_non_collab_filters(filter_json, catalog_fields)
         expected = {
             "type": "and",
             "filters": []
@@ -228,7 +228,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
+        early_filter, result, has_dynamic = precompute_utils.parse_non_collab_filters(filter_json, catalog_fields)
         expected = {
             "type": "or",
             "filters": [{
@@ -298,7 +298,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
+        early_filter, result, has_dynamic = precompute_utils.parse_non_collab_filters(filter_json, catalog_fields)
         expected = {
             "type": "or",
             "filters": []
@@ -344,7 +344,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        early_filter, result, has_dynamic = precompute_utils.parse_supported_filters(filter_json, catalog_fields)
+        early_filter, result, has_dynamic = precompute_utils.parse_non_collab_filters(filter_json, catalog_fields)
         expected = {
             "type": "and",
             "filters": [{
@@ -383,3 +383,175 @@ class PrecomputeUtilsTestCase(TestCase):
         unload_path, send_time = precompute_utils.create_unload_target_path(account_id, recset_id)
         self.assertTrue('{:%Y%m%dT%H%M%S.000Z}'.format(send_time) in unload_path)
         self.assertEqual(unload_path, '@test_db.public.test_reco_merch_stage_v1/recs_global/{t:%Y/%m/%d}/recs_global-{t:%Y%m%dT%H%M%S.000Z}_PT1M-524288-655360-precompute_123_456.json.gz'.format(t=send_time))
+
+    def test_parse_collab_static_dynamic_filter(self):
+        # we can't 'or' across product_type and other filters because of how the filters are performed in two separate
+        # spots, so this should be excluded
+        filter_json = json.dumps({
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Halloween > Texas"]
+                }
+            },
+
+                {
+                    "type": "startswith",
+                    "left": {
+                        "type": "field",
+                        "field": "product_type"
+                    },
+                    "right": {
+                        "type": "function",
+                        "value": "items_from_base_recommendation_on"
+                    }
+                }
+            ]
+        })
+        catalog_fields = [
+            {
+                'name': 'product_type',
+                'data_type': 'string'
+            },
+            {
+                'name': 'brand',
+                'data_type': 'string'
+            }
+        ]
+        static_filter, dynamic_filter = precompute_utils.parse_collab_filters(filter_json, catalog_fields)
+        expected_static = {
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Halloween > Texas"]
+                }
+            }]
+        }
+        expected_dynamic = {
+            "type": "and",
+            "filters": [{
+                    "type": "startswith",
+                    "left": {
+                        "type": "field",
+                        "field": "product_type"
+                    },
+                    "right": {
+                        "type": "function",
+                        "value": "items_from_base_recommendation_on"
+                    }
+                }]
+        }
+        self.assertEqual(static_filter, expected_static)
+        self.assertEqual(dynamic_filter, expected_dynamic)
+
+    def test_parse_collab_unsopported_dynamic_filter(self):
+        filter_json = json.dumps({
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Halloween > Texas"]
+                }
+            },
+
+                {
+                    "type": "startswith",
+                    "left": {
+                        "type": "field",
+                        "field": "product_type"
+                    },
+                    "right": {
+                        "type": "function",
+                        "value": "any_item_in_cart"
+                    }
+                }
+            ]
+        })
+        catalog_fields = [
+            {
+                'name': 'product_type',
+                'data_type': 'string'
+            },
+            {
+                'name': 'brand',
+                'data_type': 'string'
+            }
+        ]
+        static_filter, dynamic_filter = precompute_utils.parse_collab_filters(filter_json, catalog_fields)
+        expected_static = {
+            "type": "and",
+            "filters": [{
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Apparel > Jeans"]
+                }
+            }, {
+                "type": "startswith",
+                "left": {
+                    "type": "field",
+                    "field": "product_type"
+                },
+                "right": {
+                    "type": "value",
+                    "value": ["Halloween > Texas"]
+                }
+            }]
+        }
+        expected_dynamic = {
+            "type": "and",
+            "filters": []
+        }
+        self.assertEqual(static_filter, expected_static)
+        self.assertEqual(dynamic_filter, expected_dynamic)
