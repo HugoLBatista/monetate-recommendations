@@ -48,7 +48,9 @@ catalog_fields = [{'name': 'id', 'data_type': 'STRING'},
                   {'name': 'mpn', 'data_type': 'STRING'},
                   {'name': 'condition', 'data_type': 'STRING'},
                   {'name': 'adult', 'data_type': 'BOOLEAN'},
-                  {'name': 'is_bundle', 'data_type': 'BOOLEAN'}]
+                  {'name': 'is_bundle', 'data_type': 'BOOLEAN'},
+                  {'name': 'color', 'data_type': 'STRING'},
+                  {'name': 'product_category', 'data_type': 'STRING'}]
 
 
 class SimpleQSMock(object):
@@ -57,7 +59,6 @@ class SimpleQSMock(object):
 
     def values(self, ignoreA, ignoreB):
         return self.cf
-
 
 simpleQSMock = SimpleQSMock(catalog_fields)
 
@@ -118,24 +119,42 @@ class RecsTestCase(SnowflakeTestCase):
             """
             INSERT INTO product_catalog
                 (retailer_id, dataset_id, id, description, image_link, item_group_id, link, price, product_type,
-                 title, update_time, brand, is_bundle)
-            VALUES
-                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 title, update_time, brand, is_bundle, color, availability, custom)
+            VALUES 
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00001', 'test', 'http://monetate.com/SKU-00001.jpg',
-             'TP-00001', 'http://monetate.com/1', 1.99, 'Clothing > Pants', 'Jean Pants', update_time, "ab", False),
+             'TP-00001', 'http://monetate.com/1', 1.99, 'Clothing > Pants', 'Jean Pants', update_time, "ab", False,
+             'black', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00002', 'test', 'http://monetate.com/SKU-00002.jpg',
              'TP-00002', 'http://monetate.com/2', 2.99, 'Clothing > Pants, test', 'Jean Pants', update_time, "bc",
-             True),
+             True, 'black', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00003', 'test', 'http://monetate.com/SKU-00003.jpg',
-             'TP-00003', 'http://monetate.com/3', 3.99, 'Clothing > Pants', 'Jean Pants', update_time, "cd", True),
+             'TP-00003', 'http://monetate.com/3', 3.99, 'Clothing > Pants', 'Jean Pants', update_time, "cd", True,
+             'red', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00004', 'test', 'http://monetate.com/SKU-00004.jpg',
              'TP-00004', 'http://monetate.com/4', 4.99, 'test ,    Clothing > Jeans', 'Jean Pants', update_time, "de",
-             False),
+             False, 'red', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00005', 'test', 'http://monetate.com/SKU-00005.jpg',
-             'TP-00005', 'http://monetate.com/5', 5.99, 'Clothing > Jeans', 'Jean Pants', update_time, "ef", False),
+             'TP-00005', 'http://monetate.com/5', 5.99, 'Clothing > Jeans', 'Jean Pants', update_time, "ef", False,
+             'blue', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00006', 'test', 'http://monetate.com/SKU-00006.jpg',
-             'TP-00005', 'http://monetate.com/5', 6.99, 'test,Clothing > Jeans', 'Jean Pants', update_time, "fg", True),
+             'TP-00005', 'http://monetate.com/5', 6.99, 'test,Clothing > Jeans', 'Jean Pants', update_time, "fg", True,
+             'white', 'In Stock', None),
+        )
+        cls.conn.execute(
+            """
+            UPDATE product_catalog
+            SET custom = parse_json('{"product_category":"Daily Wear"}') 
+            WHERE id in ('SKU-00001','SKU-00002','SKU-00003','SKU-00004')
+            """
+        )
+        cls.conn.execute(
+            """
+            UPDATE product_catalog
+            SET custom = parse_json('{"product_category":"Daily_Wear"}') 
+            WHERE id in ('SKU-00005','SKU-00006')
+            """
         )
         cutoff_time = now - timedelta(minutes=10)
         cls.conn.execute(
@@ -334,7 +353,8 @@ class RecsTestCaseWithData(RecsTestCase):
 
     @patch_invalidations
     def _run_collab_recs_test(self, algorithm, lookback, recsets, expected_results,
-                              account=None, market=None, retailer=None):
+                              account=None, market=None, retailer=None,
+                              similar_product_weights_json=None):
 
         recset_group = recs_models.PrecomputeQueue.objects.get(
                 account=account,
@@ -344,6 +364,16 @@ class RecsTestCaseWithData(RecsTestCase):
                 lookback_days=lookback,
             )
 
+        # Insert row into config to mock out the similar_product_weights_json setting
+        old_rec_setting = recs_models.AccountRecommendationSetting.objects.filter(account=self.account)
+        if old_rec_setting:
+            old_rec_setting[0].delete()
+        recs_models.AccountRecommendationSetting.objects.create(
+            account=self.account,
+            lookback=lookback,
+            filter_json='{"type": "or", "filters": []}',
+            similar_product_weights_json=similar_product_weights_json,
+        )
         unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group.account,
                                                                                  recset_group.market,
                                                                                  recset_group.retailer,
@@ -394,11 +424,9 @@ class RecsTestCaseWithData(RecsTestCase):
 
         # test pid-sku (per recset)
         for index, recset in enumerate(recsets):
-
             expected_result_arr = expected_results[recset.id]
             actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index])]
             self.assertEqual(len(expected_result_arr), len(actual_results))
-
             for i, item in enumerate(expected_result_arr):
                 actual_result = actual_results[i]
                 if recset.account:
