@@ -28,8 +28,11 @@ class SimilarProductsV2TestCase(RecsTestCaseWithData):
         # account level 7 day lookback
         recs3 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 7, 'global_recset': False,
                  'market': False, 'retailer_market_scope': False}
+        # account level 2 day lookback
+        recs4 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 2, 'global_recset': False,
+                 'market': False, 'retailer_market_scope': False}
 
-        recsets_to_create = [recs1, recs2, recs3]
+        recsets_to_create = [recs1, recs2, recs3, recs4]
         with invalidation_context():
             for recset in recsets_to_create:
                 rec = recs_models.RecommendationSet.objects.create(
@@ -138,16 +141,16 @@ class SimilarProductsV2TestCase(RecsTestCaseWithData):
                                    expected_results, account=self.account,
                                    similar_product_weights_json=similar_product_weights_json)
 
-    """def test_default_attribute_weights_not_enabled_similar_products_v2(self):
+    def test_default_attribute_weights_not_enabled_similar_products_v2(self):
         recsets = recs_models.RecommendationSet.objects.filter(
             Q(algorithm='similar_products_v2',
               account=self.account,
-              lookback_days=30,
+              lookback_days=2,
               market=None,
               retailer_market_scope=None) |
             Q(algorithm='similar_products_v2',
               account=None,
-              lookback_days=30,
+              lookback_days=2,
               market=None,
               retailer_market_scope=None)
         )
@@ -157,56 +160,17 @@ class SimilarProductsV2TestCase(RecsTestCaseWithData):
                                                           {"catalog_attribute": "product_type"},
                                                           ]})
 
-        recs1_expected_result = [
+        recs4_expected_result = [
             ('TP-00004', [('SKU-00003', 1), ('SKU-00006', 2), ('SKU-00005', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
-            ('TP-00001', [('SKU-00002', 1), ('SKU-00003', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00004', 5)]),
+            ('TP-00001', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00004', 5)]),
             ('TP-00003', [('SKU-00004', 1), ('SKU-00001', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00002', 5)]),
             ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
             ('TP-00002', [('SKU-00001', 1), ('SKU-00006', 2), ('SKU-00005', 3), ('SKU-00004', 4), ('SKU-00003', 5)]),
         ]
-        recs2_expected_result = [
-            ('TP-00002', [('SKU-00001', 1)]),
-            ('TP-00005', [('SKU-00001', 1)]),
-            ('TP-00003', [('SKU-00001', 1)]),
-            ('TP-00004', [('SKU-00001', 1)]),
-        ]
-        expected_results_arr = [recs1_expected_result,recs2_expected_result]
+        expected_results_arr = [recs4_expected_result]
         expected_results = {}
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
-        self._run_collab_recs_test('similar_products_v2', 30, recsets,
+        self._run_collab_recs_test('similar_products_v2', 2, recsets,
                                    expected_results, account=self.account,
                                    similar_product_weights_json=similar_product_weights_json)
-
-    def test_custom_attribute_weights_not_enabled_similar_products_v2(self):
-        recsets = recs_models.RecommendationSet.objects.filter(
-            Q(algorithm='similar_products_v2',
-              account=None,
-              lookback_days=30,
-              market=None,
-              retailer_market_scope=None)
-        )
-
-        similar_product_weights_json=json.dumps({"enabled_catalog_attributes":
-                                                         [{"catalog_attribute": "product_category"}]})
-
-        recs1_expected_result = [
-            ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
-            ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
-            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
-            ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
-            ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
-        ]
-        recs2_expected_result = [
-            ('TP-00002', [('SKU-00001', 1)]),
-            ('TP-00005', [('SKU-00001', 1)]),
-            ('TP-00003', [('SKU-00001', 1)]),
-            ('TP-00004', [('SKU-00001', 1)]),
-        ]
-        expected_results_arr = [recs1_expected_result,recs2_expected_result]
-        expected_results = {}
-        for index, r in enumerate(recsets):
-            expected_results[r.id] = expected_results_arr[index]
-        self._run_collab_recs_test('similar_products_v2', 30, recsets,
-                                   expected_results, account=self.account,
-                                   similar_product_weights_json=similar_product_weights_json)"""
