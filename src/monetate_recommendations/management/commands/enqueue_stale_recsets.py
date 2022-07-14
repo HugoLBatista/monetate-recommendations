@@ -62,7 +62,7 @@ class Command(BaseCommand):
         updated_recsets = []
         created_recsets = []
         for recset in precompute_recsets:
-            precompute_recsets_status = recs_models.RecommendationsPrecompute.objects.filter(recset=recset)
+            precompute_recsets_status = recs_models.RecommendationsPrecompute.objects.filter(recset=recset).defer('status_log')
             heartbeat_threshold = 300
             heartbeat_old_time = timezone.now() - datetime.timedelta(seconds=heartbeat_threshold)
             # exclude recsets that are pending or currently processing and have a heartbeat in the past 5 minutes or
@@ -128,7 +128,7 @@ class Command(BaseCommand):
         # updating entries for precompute combined queue
         updated_recsets_groups = recs_models.PrecomputeQueue.objects.filter(
             precompute_end_time__lt=stale_time,
-        ).exclude(
+        ).defer('status_log').exclude(
             status=precompute_constants.STATUS_PENDING
         ).update(
             status=precompute_constants.STATUS_PENDING,
