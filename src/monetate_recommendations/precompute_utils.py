@@ -260,14 +260,20 @@ JOIN score_scaling"""
 
 SKU_RANKS_BY_COLLAB_RECSET = """
 CREATE TEMPORARY TABLE scratch.recset_{account_id}_{recset_id}_ranks AS
-WITH 
-    non_expired_catalog_items as (
+WITH
+    latest_catalog as (
     SELECT pc.* FROM product_catalog as pc
     JOIN config_dataset_data_expiration e
-    ON pc.dataset_id = e.dataset_id 
+    ON pc.dataset_id = e.dataset_id
     WHERE pc.retailer_id=:retailer_id AND pc.dataset_id = :catalog_dataset_id
     AND pc.update_time >= e.cutoff_time
     ),
+    filtered_catalog as (
+    SELECT *
+    FROM latest_catalog as lc
+    {static_filter}
+    ),
+
     sku_algo AS (
         /* Explode recommended product ids into recommended representative skus */
         SELECT
@@ -276,12 +282,10 @@ WITH
             pid_algo.score,
             pid_algo.normalized_score
          FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
-            JOIN non_expired_catalog_items context
-            ON pid_algo.lookup_key = context.item_group_id
-          JOIN non_expired_catalog_items recommendation
-            ON pid_algo.product_id = recommendation.item_group_id
-            {filter}
-            GROUP BY 1,3,4,recommendation.color,recommendation.image_link
+         JOIN filtered_catalog recommendation
+            ON pid_algo.product_id = recommendation.item_group_id 
+            {dynamic_filter}
+        GROUP BY 1,3,4,recommendation.color,recommendation.image_link
     )
     SELECT
         lookup_key,
@@ -347,29 +351,12 @@ FROM product_catalog
 WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability)=lower(:availability)
 """
 
-def parse_supported_filters(filter_json, catalog_fields):
-    def _filter_product_type(f):
-        return f['left']['field'] == 'product_type'
-
-    def _filter_not_product_type(f):
-        return f['left']['field'] != 'product_type'
-
-    def _filter_dynamic(f):
-        return f['right']['type'] != 'function'
-
-    def _filter_supported_static_filter(f):
-        # Removing catalog fields that we dont support such as custom attributes 
-        # with datatype as "multistring" or "google_product_category"
-        catalog_field = next((catalog_field for catalog_field in catalog_fields if
-                              catalog_field["name"].lower() == f['left']['field'].lower()), None)
-        return f['left']['field'].lower() not in UNSUPPORTED_PREFILTER_FIELDS and f['right']['type'] != 'function' and \
-            catalog_field and catalog_field["data_type"].lower() in SUPPORTED_DATA_TYPES
+def parse_supported_filters(filter_dict, catalog_fields, algo_type):
 
     # a filter is supported if:
     #   1. it is in the list of supported prefilter fields AND
     #   2. the filter type (equal to, starts with, etc) is supported AND
-    #   3. it is a product_type field OR it is a constant (not a function = constant) AND 
-    #   4. the datatype is a supported data type
+    #   3. the datatype is a supported data type
     def _filter_supported_filters(f):
         catalog_field = next((catalog_field for catalog_field in catalog_fields if
                               catalog_field["name"].lower() == f['left']['field'].lower()), None)
@@ -378,17 +365,40 @@ def parse_supported_filters(filter_json, catalog_fields):
         ) and (
                 f['type'] in FILTER_MAP
         ) and (
-                f['right']['type'] != 'function' or f['left']['field'] == 'product_type'
-        ) and (
             catalog_field and catalog_field["data_type"].lower() in SUPPORTED_DATA_TYPES
         )
 
+    # a filter is supported if:
+    #   1. true from _filter_supporterd_filters
+    #   2. is a static or a product_type
+    def _filter_non_collab_supported_filters(f):
+        return _filter_supported_filters(f) and (
+                f['right']['type'] != 'function' or f['left']['field'] == 'product_type')
+
+    # a filter is supported if:
+    #   1. true from _filter_supporterd_filters
+    #   2. is a static or dynamic function items_from_base_recommendation_on
+    def _filter_collab_supported_filters(f):
+        return _filter_supported_filters(f) and (
+                f['right']['type'] != 'function' or f['right']['value'] == 'items_from_base_recommendation_on')
+
+    if algo_type == 'collaborative':
+        supported_filters = list(filter(_filter_collab_supported_filters, filter_dict['filters']))
+    else:
+        supported_filters = list(filter(_filter_non_collab_supported_filters, filter_dict['filters']))
+
+    return supported_filters
+
+
+def parse_non_collab_filters(filter_json, catalog_fields):
     filter_dict = json.loads(filter_json)
-    supported_filters = list(filter(_filter_supported_filters, filter_dict['filters']))
-    product_type_filters = list(filter(_filter_product_type, supported_filters))
-    static_product_type_filters = list(filter(_filter_dynamic, product_type_filters))
-    static_supported_filters = list(filter(_filter_supported_static_filter, supported_filters))
-    static_supported_filters_non_product_type = list(filter(_filter_not_product_type, static_supported_filters))
+    supported_filters = parse_supported_filters(filter_dict, catalog_fields, 'non_collaborative')
+    static_supported_filters = [f for f in supported_filters if f['right']['type'] != 'function']
+    product_type_filters = [f for f in supported_filters if f['left']['field'] == 'product_type']
+    static_product_type_filters = [f for f in product_type_filters if f['right']['type'] != 'function']
+    static_supported_filters_non_product_type = [f for f in static_supported_filters
+                                                 if f['left']['field'] != 'product_type']
+
 
     # when the expression is an "or" expression, we can only prefilter if all fields are supported for pre-filtering
     # AND there is not a mixture of filters on product_type plus other fields. product_type filtering is performed in
@@ -410,6 +420,44 @@ def parse_supported_filters(filter_json, catalog_fields):
     late_filter_expr = deepcopy(filter_dict)
     late_filter_expr['filters'] = static_product_type_filters
     return early_filter_expr, late_filter_expr, has_dynamic_product_type_filter
+
+
+def parse_collab_filters(filter_json, catalog_fields):
+
+    filter_dict = json.loads(filter_json)
+    static_supported_filters = deepcopy(filter_dict)
+    dynamic_supporterd_filter = deepcopy(filter_dict)
+    supported_filters = parse_supported_filters(filter_dict, catalog_fields, 'collaborative')
+
+    static_supported_filters['filters'] = [f for f in supported_filters if f['right']['type'] != 'function']
+    dynamic_supporterd_filter['filters'] = [f for f in supported_filters if f['right']['type'] == 'function']
+
+    return static_supported_filters, dynamic_supporterd_filter
+
+
+def collab_dynamic_filter_query(recset_dynamic_filter, global_dynamic_filter, catalog_fields):
+    if recset_dynamic_filter['filters'] or global_dynamic_filter['filters']:
+        dynamic_filter_sql, dynamic_filter_variables = filters.get_query_and_variables_collab(recset_dynamic_filter,
+                                                                                              global_dynamic_filter,
+                                                                                              catalog_fields)
+        # the query is used when we have dynamic filters in a rec strategy for collab algo
+        # this query is used in the SKU_RANKS_BY_COLLAB_RECSET query in place of the {dynamic_filter} variable
+        dynamic_filter_query = """
+        JOIN filtered_catalog context
+        ON pid_algo.lookup_key = context.item_group_id
+        WHERE {}""".format(dynamic_filter_sql)
+        return dynamic_filter_query
+    return ''
+
+
+def get_static_and_dynamic_filter(recset_filter, global_filter, catalog_fields):
+
+    recset_static_filter, recset_dynamic_filter = parse_collab_filters(recset_filter, catalog_fields)
+    global_static_filter, global_dynamic_filter = parse_collab_filters(global_filter, catalog_fields)
+    dynamic_filter_sql = collab_dynamic_filter_query(recset_dynamic_filter,global_dynamic_filter, catalog_fields)
+    static_filter_sql, static_filter_variables = filters.get_query_and_variables_collab(recset_static_filter,
+                                           global_static_filter, catalog_fields)
+    return ('WHERE ' + static_filter_sql), static_filter_variables, dynamic_filter_sql
 
 
 def get_fact_time(lookback):
@@ -688,10 +736,10 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
         except:
             log.log_info("Skipping account id {}, no catalog set".format(account_id))
             continue
-        early_filter_exp, late_filter_exp, has_dynamic_filter = parse_supported_filters(recset.filter_json,
+        early_filter_exp, late_filter_exp, has_dynamic_filter = parse_non_collab_filters(recset.filter_json,
                                                                                         catalog_fields)
         global_early_filter_exp, global_late_filter_exp, global_has_dynamic_filter = \
-            parse_supported_filters(global_filter_json, catalog_fields)
+            parse_non_collab_filters(global_filter_json, catalog_fields)
         has_dynamic_filter = has_dynamic_filter or global_has_dynamic_filter
         early_filter_sql, late_filter_sql, filter_variables = supported_prefilter_expression.get_query_and_variables(
             early_filter_exp, late_filter_exp, global_early_filter_exp, global_late_filter_exp, catalog_fields)
@@ -858,19 +906,21 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
             except dio_models.DefaultAccountCatalog.DoesNotExist:
                 log.log_info("Skipping {} with account id {}, no catalog set found".format(account_id, account_id.id))
                 continue
-            filter_sql, filter_variables = filters.get_query_and_variables_collab(recset.filter_json, global_filter_json, catalog_fields)
+            static_filter_sql, static_filter_variables, dynamic_filter_sql = get_static_and_dynamic_filter(
+                recset.filter_json, global_filter_json, catalog_fields)
             # this query explodes the pid to sku to create a pid-sku relation
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,
                                                                 pid_rank_account_id=account,
                                                                 lookback_days=recset.lookback_days,
-                                                                filter=filter_sql,
+                                                                dynamic_filter=dynamic_filter_sql,
                                                                 market_id=market,
                                                                 retailer_id=retailer,
+                                                                static_filter=static_filter_sql
                                                                 )),
                          retailer_id=recset.retailer.id,
                          catalog_dataset_id=catalog_id,
-                         **filter_variables)
+                         **static_filter_variables)
 
             unload_path, send_time = create_unload_target_path(account_id.id, recset.id)
             result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,

@@ -50,8 +50,8 @@ class SupportedPrefilterTestCase(TestCase):
         expected_single_converted = "(product_type LIKE :product_type_1 || '%%') OR (product_type LIKE '%%' || :product_type_2 || '%%') OR (product_type LIKE :product_type_3 || '%%') OR (product_type LIKE '%%' || :product_type_4 || '%%')"
         expected_empty_converted = None
 
-        early_filter, late_filter, has_dynamic = precompute_utils.parse_supported_filters(valid_filter_json, catalog_fields)
-        empty_early_filter, empty_late_filter, empty_has_dynamic = precompute_utils.parse_supported_filters(
+        early_filter, late_filter, has_dynamic = precompute_utils.parse_non_collab_filters(valid_filter_json, catalog_fields)
+        empty_early_filter, empty_late_filter, empty_has_dynamic = precompute_utils.parse_non_collab_filters(
             empty_filter_json, catalog_fields)
         empty_first_test = supported_prefilter_expression.and_with_convert_without_null(empty_early_filter, late_filter, catalog_fields)
         empty_both_test = supported_prefilter_expression.and_with_convert_without_null(empty_early_filter,
@@ -66,9 +66,9 @@ class SupportedPrefilterTestCase(TestCase):
         self.assertEqual(str(valid_both_test), expected_combined_converted)
 
     def test_get_query_and_variables(self):
-        valid_early_filter, valid_late_filter, valid_has_dynamic = precompute_utils.parse_supported_filters(
+        valid_early_filter, valid_late_filter, valid_has_dynamic = precompute_utils.parse_non_collab_filters(
             valid_filter_json, catalog_fields)
-        empty_early_filter, empty_late_filter, empty_has_dynamic = precompute_utils.parse_supported_filters(
+        empty_early_filter, empty_late_filter, empty_has_dynamic = precompute_utils.parse_non_collab_filters(
             empty_filter_json, catalog_fields)
         valid_result = supported_prefilter_expression.get_query_and_variables(
             valid_early_filter, valid_late_filter, empty_early_filter, empty_late_filter, catalog_fields)
