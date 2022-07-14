@@ -8,8 +8,8 @@ def get_column(field, catalog_fields):
         return 'product_type'
     catalog_field = next(catalog_field for catalog_field in catalog_fields
                          if catalog_field["name"].lower() == field.lower())
-    return ("c." + field) if field in SUPPORTED_PREFILTER_FIELDS else \
-        ("c.custom:" + field + "::" + DATA_TYPE_TO_SNOWFLAKE_TYPE[catalog_field["data_type"].lower()])
+    return ("lc." + field) if field in SUPPORTED_PREFILTER_FIELDS else \
+        ("lc.custom:" + field + "::" + DATA_TYPE_TO_SNOWFLAKE_TYPE[catalog_field["data_type"].lower()])
 
 # Assumptions:
 # We don't want to do assertions or validation in this code. That should be done in WebUI.
@@ -251,6 +251,6 @@ def get_query_and_variables(non_product_type_expression, product_type_expression
                                                            second_product_type_expression, catalog_fields))
     [early_filter, late_filter] = str(sql_expression).split(" COLLATE ")
     params = sql_expression.compile().params if sql_expression is not None else {}
-    return ("AND " + early_filter) if early_filter != "NULL" else '', \
+    return ("WHERE " + early_filter) if early_filter != "NULL" else '', \
            ("WHERE " + late_filter) if late_filter != "NULL" else '', \
            params
