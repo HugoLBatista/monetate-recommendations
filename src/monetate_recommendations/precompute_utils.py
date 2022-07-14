@@ -162,6 +162,18 @@ pid_algo AS (
     FROM pid_algo_raw, pid_max_score
     GROUP BY product_id, max_score, score {geo_columns}
 ),
+latest_catalog AS (
+ SELECT pc.* FROM product_catalog as pc
+    JOIN config_dataset_data_expiration e
+     ON pc.dataset_id = e.dataset_id
+ WHERE pc.retailer_id=:retailer_id AND pc.dataset_id = :catalog_id
+    AND pc.update_time >= e.cutoff_time
+),
+filtered_catalog AS (
+SELECT *
+FROM latest_catalog as lc
+{early_filter}
+),
 reduced_catalog AS (
     /*
         Reduce catalog to representative visually distinct items by (image link, color) per item group
@@ -183,14 +195,8 @@ reduced_catalog AS (
                 /* Flatten, trim extra spaces, and convert back to string for filtering */
                 array_to_string(array_agg(TRIM(split_product_type.value::string, ' ')), ',') as product_type,
                 MAX(c.id) AS id
-            FROM product_catalog c
-            JOIN config_dataset_data_expiration e
-                ON c.dataset_id = e.dataset_id,
+            FROM filtered_catalog as c,
             LATERAL FLATTEN(input=>split(c.product_type, ',')) split_product_type
-            WHERE c.dataset_id = :catalog_id
-                AND c.retailer_id = :retailer_id
-                AND c.update_time >= e.cutoff_time
-                {early_filter}
             GROUP BY 1, 2, 3
         )
         {late_filter}
