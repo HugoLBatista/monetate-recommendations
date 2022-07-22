@@ -66,7 +66,7 @@ def contains_expression(expression, catalog_fields):
     value = expression["right"]["value"]
 
     if field == "product_type" and expression["right"]["type"] == "function":
-        return text("any_contains_udf(recommendation.product_type, context.product_type)")
+        return text("any_contains_udf(str_to_array_udf(recommendation.product_type), str_to_array_udf(context.product_type))")
 
     like_statements = []
     for i in value:
