@@ -128,7 +128,7 @@ SELECT filtered_scored_records.*,
     TRIM(split_product_type.value::string, ' ') as split_product_type,
     ROW_NUMBER() OVER ({partition_by} ORDER BY score DESC, id) as rank
 FROM filtered_scored_records,
-LATERAL FLATTEN(input=>ARRAY_APPEND(SPLIT(product_type, ','), '')) split_product_type
+LATERAL FLATTEN(input=>ARRAY_APPEND(parse_csv_string_udf(product_type), '')) split_product_type
 """
 
 STATIC_FILTER_RANKS = """
