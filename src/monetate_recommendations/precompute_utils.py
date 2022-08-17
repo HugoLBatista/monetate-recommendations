@@ -320,6 +320,22 @@ WHERE account_id in (:account_ids)
     AND product_id NOT IN ('', 'null', 'NULL')
 GROUP BY 1, 2, 3, 4, 5
 """
+
+GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+SELECT a.account_id, a.dataset_id, p.customer_id, p.product_id, max(p.time) as fact_time
+FROM (
+    SELECT account_id, dataset_id
+    FROM (VALUES (:aids_dids)) t(account_id, dataset_id)
+) a
+RIGHT JOIN dio_purchase p
+ON p.dataset_id = a.dataset_id
+    /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
+    AND product_id NOT IN ('', 'null', 'NULL')
+GROUP BY 1, 2, 3, 4
+HAVING fact_time >= :begin_fact_time
+"""
+
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
 # example  6814_None_None
 GET_EARLIEST_VIEW_PER_MID_AND_PID = """
@@ -473,11 +489,24 @@ def get_fact_time(lookback):
     return begin_fact_time, end_fact_time
 
 
-def create_helper_query(conn, accounts_to_process, lookback, algorithm, account, query):
+def create_helper_query(conn, accounts_to_process, lookback, algorithm, account, online_query, offline_purchase_query,
+                        purchase_data_source):
     begin_fact_time, end_fact_time = get_fact_time(lookback)
     if algorithm == 'purchase_also_purchase':
-        conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+        dataset_ids, accounts_datasets = get_dataset_ids_for_pos(accounts_to_process)
+        if purchase_data_source == "offline":
+            conn.execute(offline_purchase_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+                     end_fact_time=end_fact_time, dataset_ids=dataset_ids, aids_dids=accounts_datasets)
+        # online only
+        elif purchase_data_source == "online":
+            conn.execute(online_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
                      end_fact_time=end_fact_time)
+        # online_offline (execute both queries)
+        else:
+            conn.execute(offline_purchase_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+                         end_fact_time=end_fact_time, dataset_ids=dataset_ids, aids_dids=accounts_datasets)
+            conn.execute(online_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+                         end_fact_time=end_fact_time)
     elif algorithm == 'view_also_view':
         conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
                      end_fact_time=end_fact_time, lookback=lookback)
@@ -785,7 +814,8 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     return result_counts
 
 
-def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_query, algo_helper_query):
+def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_query, algo_helper_query,
+                                        complete_offline_query, offline_purchase_query=None):
     result_counts = []
     # Disable pooling so temp tables do not persist on connections returned to pool
     engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
@@ -797,7 +827,8 @@ def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_quer
             if recset_group and recset_group.algorithm == algorithm:
                 log.log_info('processing recset {}'.format(recset_group.id))
                 result_counts.append(
-                    process_collab_algorithm(warehouse_conn, recset_group, algorithm_query, algo_helper_query))
+                    process_collab_algorithm(warehouse_conn, recset_group, algorithm_query, algo_helper_query,
+                                             complete_offline_query, offline_purchase_query))
     log.log_info('ending precompute_{}_algorithm process'.format(algorithm))
     return result_counts
 
@@ -836,20 +867,49 @@ def get_similar_products_weights(account, market, retailer, lookback_days):
     return weights_sql, selected_attributes
 
 
-def run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count):
+def run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count,
+                              complete_offline_query, purchase_data_source):
     if algorithm == 'similar_products_v2':
         weights_sql, selected_attributes = get_similar_products_weights(account, market, retailer, lookback_days)
         conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
                                                     retailer_id=retailer, lookback_days=lookback_days,
                                                     weights=weights_sql, selected_attributes=selected_attributes
                                                     )))
+    # and purchase_data_source == "online_offline"
+    elif algorithm == "purchase_also_purchase":
+        if purchase_data_source == "online_offline":
+            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days)),
+                                                    minimum_count=min_count).union(text(complete_offline_query(
+                                                        algorithm=algorithm, account_id=account, market_id=market,
+                                                        retailer_id=retailer, lookback_days=lookback_days)))
+        elif purchase_data_source == "online":
+            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                        retailer_id=retailer, lookback_days=lookback_days)),
+                         minimum_count=min_count)
+        elif purchase_data_source == "offline":
+            conn.execute(text(complete_offline_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                        retailer_id=retailer, lookback_days=lookback_days)))
     else:
         conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
                                                     retailer_id=retailer, lookback_days=lookback_days)),
                      minimum_count=min_count)
 
 
-def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
+def get_dataset_ids_for_pos(account_ids):
+    account_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
+                                              pos_dataset_id__isnull=False).values_list("account_id", "pos_dataset_id"))
+    flattened_aids_dids = list(sum(account_dataset_ids, ()))
+    dataset_ids_list = get_list_from_queryset(account_dataset_ids, "dataset_ids")
+    return dataset_ids_list, flattened_aids_dids
+
+
+def get_list_from_queryset(queryset):
+    return [row[1] for row in queryset]
+
+
+def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query, complete_offline_query,
+                             offline_purchase_helper_query=None):
     result_counts = []
     # since the queue table currently has accounts that do not have the precompute collab feature flag
     # we don't want to process these queue entries
@@ -869,7 +929,10 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     # this query creates a temp table with all the purchases or views in given lookback period
     create_helper_query(conn, account_ids, lookback_days, algorithm, recset_group.account,
                         text(helper_query.format(account_id=account, market_id=market,
-                                                 retailer_id=retailer, lookback_days=lookback_days)))
+                                                 retailer_id=retailer, lookback_days=lookback_days)),
+                        text(offline_purchase_helper_query.format(account_id=account, market_id=market,
+                                                 retailer_id=retailer, lookback_days=lookback_days)),
+                        recset_group.purchase_data_source)
     # if pap, account level, and account has min threshold feature flag use min threshold else set min_count to 1
     # TODO: Handle Min. PAP feature flag later on like catalog
     min_count = MIN_PURCHASE_THRESHOLD \
@@ -877,7 +940,8 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
            and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) \
            and algorithm == 'purchase_also_purchase' else 1
     # this query creates a pid pid relation with a score
-    run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count)
+    run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count
+                              , text(GET), complete_offline_query, recset_group.purchase_data_source)
 
     # this query add normalized score
     conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,

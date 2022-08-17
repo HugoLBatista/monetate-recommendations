@@ -26,10 +26,23 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
     HAVING count(*) >= :minimum_count
 """
 
+OFFLINE_PURCHASE_QUERY = """
+    SELECT
+        p1.account_id account_id,
+        p1.product_id pid1,
+        p2.product_id pid2,
+        count(*) score
+    FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+    JOIN scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+        ON p1.dataset_id = p2.dataset_id
+        AND p1.customer_id = p2.customer_id
+        AND p1.product_id != p2.product_id
+    GROUP BY 1, 2, 3
+"""
+
 
 def precompute_purchase_also_purchase_algorithm(recsets_group):
 
     return precompute_utils.initialize_process_collab_algorithm(recsets_group, 'purchase_also_purchase',
-                                                                PURCHASE_ALSO_PURCHASE,
-                                                                precompute_utils.GET_LAST_PURCHASE_PER_MID_AND_PID)
-
+        PURCHASE_ALSO_PURCHASE, precompute_utils.GET_LAST_PURCHASE_PER_MID_AND_PID, OFFLINE_PURCHASE_QUERY,
+        precompute_utils.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID)
