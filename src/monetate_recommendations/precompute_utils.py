@@ -940,8 +940,8 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
            and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) \
            and algorithm == 'purchase_also_purchase' else 1
     # this query creates a pid pid relation with a score
-    run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count
-                              , text(GET), complete_offline_query, recset_group.purchase_data_source)
+    run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count,
+                               complete_offline_query, recset_group.purchase_data_source)
 
     # this query add normalized score
     conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
