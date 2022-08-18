@@ -26,6 +26,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
     HAVING count(*) >= :minimum_count
 """
 
+# TODO: Will have to slightly adjust query called here to create temp. table for offline only..
 OFFLINE_PURCHASE_QUERY = """
     SELECT
         p1.account_id account_id,
@@ -38,6 +39,7 @@ OFFLINE_PURCHASE_QUERY = """
         AND p1.customer_id = p2.customer_id
         AND p1.product_id != p2.product_id
     GROUP BY 1, 2, 3
+    HAVING count(*) >= :minimum_count
 """
 
 

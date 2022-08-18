@@ -10,7 +10,7 @@ import six
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from copy import deepcopy
-from sqlalchemy.sql import text
+from sqlalchemy.sql import text, union, column
 from monetate.common import log, job_timing
 from monetate.common.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
@@ -494,6 +494,7 @@ def create_helper_query(conn, accounts_to_process, lookback, algorithm, account,
     begin_fact_time, end_fact_time = get_fact_time(lookback)
     if algorithm == 'purchase_also_purchase':
         dataset_ids, accounts_datasets = get_dataset_ids_for_pos(accounts_to_process)
+        # offline only
         if purchase_data_source == "offline":
             conn.execute(offline_purchase_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
                      end_fact_time=end_fact_time, dataset_ids=dataset_ids, aids_dids=accounts_datasets)
@@ -875,21 +876,29 @@ def run_collab_metric_queries(conn, metric_table_query, algorithm, account, mark
                                                     retailer_id=retailer, lookback_days=lookback_days,
                                                     weights=weights_sql, selected_attributes=selected_attributes
                                                     )))
-    # and purchase_data_source == "online_offline"
     elif algorithm == "purchase_also_purchase":
+        # TODO: Need to figure out best query setup
         if purchase_data_source == "online_offline":
-            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days)),
-                                                    minimum_count=min_count).union(text(complete_offline_query(
-                                                        algorithm=algorithm, account_id=account, market_id=market,
-                                                        retailer_id=retailer, lookback_days=lookback_days)))
+            online_query = text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days))
+            offline_query = text(complete_offline_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days))
+
+            online_offline_union_query = union(
+                online_query.columns(column("account_id"), column("pid1"), column("pid2")),
+                offline_query.columns(column("account_id"), column("pid1"), column("pid2")),
+            )
+
+            conn.execute(online_offline_union_query, minimum_count=min_count)
+
         elif purchase_data_source == "online":
             conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
                                                         retailer_id=retailer, lookback_days=lookback_days)),
-                         minimum_count=min_count)
+                    minimum_count=min_count)
         elif purchase_data_source == "offline":
             conn.execute(text(complete_offline_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                        retailer_id=retailer, lookback_days=lookback_days)))
+                                                        retailer_id=retailer, lookback_days=lookback_days)),
+                                                        minimum_count=min_count)
     else:
         conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
                                                     retailer_id=retailer, lookback_days=lookback_days)),
@@ -897,15 +906,15 @@ def run_collab_metric_queries(conn, metric_table_query, algorithm, account, mark
 
 
 def get_dataset_ids_for_pos(account_ids):
+    # [(account_id, dataset_id), ...]
     account_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
                                               pos_dataset_id__isnull=False).values_list("account_id", "pos_dataset_id"))
-    flattened_aids_dids = list(sum(account_dataset_ids, ()))
-    dataset_ids_list = get_list_from_queryset(account_dataset_ids, "dataset_ids")
+    # converts list of tuples into list
+    # [account_id, dataset_id]
+    flattened_aids_dids = [item for tup_list in account_dataset_ids for item in tup_list]
+    # grabs data_set ids
+    dataset_ids_list = [row[1] for row in account_dataset_ids]
     return dataset_ids_list, flattened_aids_dids
-
-
-def get_list_from_queryset(queryset):
-    return [row[1] for row in queryset]
 
 
 def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query, complete_offline_query,
