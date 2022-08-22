@@ -244,7 +244,7 @@ score_scaling AS (
         0.01 as min_target,
         1000 as max_target,
         max_target - min_target as target_range 
-        FROM scratch_{purchase_data_source}_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+        FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source}
 )
     SELECT
         account_id, 
@@ -261,7 +261,7 @@ score_scaling AS (
             SELECT
                 account_id, pid1, pid2, score,
                 ROW_NUMBER() OVER (PARTITION by account_id, pid1 ORDER BY score DESC, pid2 DESC) AS ordinal
-            FROM scratch_{purchase_data_source}_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+            FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source}
         )
 JOIN score_scaling"""
 

@@ -10,7 +10,7 @@ log.configure_script_log('precompute_PAP_algorithm')
 #TODO: update the join on product catalog, we are multiplying our counts with the skus
 
 AGGREGATED_ONLINE_OFFLINE_QUERY = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch_{purchase_data_source}_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source} AS
 SELECT
     account_id,
     pid1,
@@ -22,7 +22,7 @@ FROM (
         pid1,
         pid2,
         count(*) score
-    FROM scratch_online_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+    FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_online
     GROUP BY 1, 2, 3
     UNION ALL
     SELECT
@@ -30,14 +30,14 @@ FROM (
         pid1,
         pid2,
         count(*) score
-    FROM scratch_offline_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+    FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_offline
     GROUP BY 1, 2, 3
    )
 GROUP BY 1, 2, 3
 """
 
 ONLINE_PURCHASE_QUERY = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch_online_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_online AS
     SELECT
         p1.account_id account_id,
         p1.product_id pid1,
@@ -56,7 +56,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch_online_{algorithm}_{account_id}_{ma
 
 # TODO: Will have to slightly adjust query called here to create temp. table for offline only..
 OFFLINE_PURCHASE_QUERY = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch_offline_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_offline AS
     SELECT
         p1.account_id account_id,
         p1.product_id pid1,
