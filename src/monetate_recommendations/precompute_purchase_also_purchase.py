@@ -8,8 +8,36 @@ from monetate_recommendations import precompute_utils
 
 log.configure_script_log('precompute_PAP_algorithm')
 #TODO: update the join on product catalog, we are multiplying our counts with the skus
-PURCHASE_ALSO_PURCHASE = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+
+AGGREGATED_ONLINE_OFFLINE_QUERY = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch_{purchase_data_source}_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+SELECT
+    account_id,
+    pid1,
+    pid2,
+    sum(score) score
+FROM (
+    SELECT
+        account_id,
+        pid1,
+        pid2,
+        count(*) score
+    FROM scratch_online_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+    GROUP BY 1, 2, 3
+    UNION ALL
+    SELECT
+        account_id,
+        pid1,
+        pid2,
+        count(*) score
+    FROM scratch_offline_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+    GROUP BY 1, 2, 3
+   )
+GROUP BY 1, 2, 3
+"""
+
+ONLINE_PURCHASE_QUERY = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch_online_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
     SELECT
         p1.account_id account_id,
         p1.product_id pid1,
@@ -28,6 +56,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
 
 # TODO: Will have to slightly adjust query called here to create temp. table for offline only..
 OFFLINE_PURCHASE_QUERY = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch_offline_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
     SELECT
         p1.account_id account_id,
         p1.product_id pid1,
@@ -46,5 +75,4 @@ OFFLINE_PURCHASE_QUERY = """
 def precompute_purchase_also_purchase_algorithm(recsets_group):
 
     return precompute_utils.initialize_process_collab_algorithm(recsets_group, 'purchase_also_purchase',
-        PURCHASE_ALSO_PURCHASE, precompute_utils.GET_LAST_PURCHASE_PER_MID_AND_PID, OFFLINE_PURCHASE_QUERY,
-        precompute_utils.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID)
+        ONLINE_PURCHASE_QUERY, precompute_utils.GET_LAST_PURCHASE_PER_MID_AND_PID)

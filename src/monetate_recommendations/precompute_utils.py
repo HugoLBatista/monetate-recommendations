@@ -10,7 +10,7 @@ import six
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from copy import deepcopy
-from sqlalchemy.sql import text, union, column
+from sqlalchemy.sql import text
 from monetate.common import log, job_timing
 from monetate.common.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
@@ -21,6 +21,7 @@ from monetate.recs.models import RecommendationSet, RecommendationSetDataset, Ac
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
 from monetate_recommendations import supported_weights_expression
+import precompute_purchase_also_purchase
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES
 from .supported_prefilter_expression import FILTER_MAP
 
@@ -243,7 +244,7 @@ score_scaling AS (
         0.01 as min_target,
         1000 as max_target,
         max_target - min_target as target_range 
-        FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+        FROM scratch_{purchase_data_source}_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
 )
     SELECT
         account_id, 
@@ -260,7 +261,7 @@ score_scaling AS (
             SELECT
                 account_id, pid1, pid2, score,
                 ROW_NUMBER() OVER (PARTITION by account_id, pid1 ORDER BY score DESC, pid2 DESC) AS ordinal
-            FROM  scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+            FROM scratch_{purchase_data_source}_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
         )
 JOIN score_scaling"""
 
@@ -815,8 +816,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     return result_counts
 
 
-def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_query, algo_helper_query,
-                                        complete_offline_query, offline_purchase_query=None):
+def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_query, algo_helper_query):
     result_counts = []
     # Disable pooling so temp tables do not persist on connections returned to pool
     engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
@@ -828,8 +828,7 @@ def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_quer
             if recset_group and recset_group.algorithm == algorithm:
                 log.log_info('processing recset {}'.format(recset_group.id))
                 result_counts.append(
-                    process_collab_algorithm(warehouse_conn, recset_group, algorithm_query, algo_helper_query,
-                                             complete_offline_query, offline_purchase_query))
+                    process_collab_algorithm(warehouse_conn, recset_group, algorithm_query, algo_helper_query))
     log.log_info('ending precompute_{}_algorithm process'.format(algorithm))
     return result_counts
 
@@ -869,7 +868,7 @@ def get_similar_products_weights(account, market, retailer, lookback_days):
 
 
 def run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count,
-                              complete_offline_query, purchase_data_source):
+                              purchase_data_source):
     if algorithm == 'similar_products_v2':
         weights_sql, selected_attributes = get_similar_products_weights(account, market, retailer, lookback_days)
         conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
@@ -877,26 +876,24 @@ def run_collab_metric_queries(conn, metric_table_query, algorithm, account, mark
                                                     weights=weights_sql, selected_attributes=selected_attributes
                                                     )))
     elif algorithm == "purchase_also_purchase":
-        # TODO: Need to figure out best query setup
         if purchase_data_source == "online_offline":
-            online_query = text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days))
-            offline_query = text(complete_offline_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days))
-
-            online_offline_union_query = union(
-                online_query.columns(column("account_id"), column("pid1"), column("pid2")),
-                offline_query.columns(column("account_id"), column("pid1"), column("pid2")),
-            )
-
-            conn.execute(online_offline_union_query, minimum_count=min_count)
+            # online query
+            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
+            # offline query
+            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PURCHASE_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
+                                                    retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
+            # online_offline (union all + sum query)
+            conn.execute(text(precompute_purchase_also_purchase.AGGREGATED_ONLINE_OFFLINE_QUERY.format(algorithm=algorithm, account_id=account,
+                                                    market_id=market, retailer_id=retailer, lookback_days=lookback_days,
+                                                    purchase_data_source=purchase_data_source)))
 
         elif purchase_data_source == "online":
             conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
                                                         retailer_id=retailer, lookback_days=lookback_days)),
                     minimum_count=min_count)
         elif purchase_data_source == "offline":
-            conn.execute(text(complete_offline_query.format(algorithm=algorithm, account_id=account, market_id=market,
+            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PURCHASE_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
                                                         retailer_id=retailer, lookback_days=lookback_days)),
                                                         minimum_count=min_count)
     else:
@@ -917,8 +914,7 @@ def get_dataset_ids_for_pos(account_ids):
     return dataset_ids_list, flattened_aids_dids
 
 
-def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query, complete_offline_query,
-                             offline_purchase_helper_query=None):
+def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
     result_counts = []
     # since the queue table currently has accounts that do not have the precompute collab feature flag
     # we don't want to process these queue entries
@@ -939,7 +935,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     create_helper_query(conn, account_ids, lookback_days, algorithm, recset_group.account,
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)),
-                        text(offline_purchase_helper_query.format(account_id=account, market_id=market,
+                        text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)),
                         recset_group.purchase_data_source)
     # if pap, account level, and account has min threshold feature flag use min threshold else set min_count to 1
@@ -950,13 +946,13 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
            and algorithm == 'purchase_also_purchase' else 1
     # this query creates a pid pid relation with a score
     run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count,
-                               complete_offline_query, recset_group.purchase_data_source)
+                              recset_group.purchase_data_source)
 
     # this query add normalized score
     conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                         lookback_days=lookback_days, market_id=market,
                                                         retailer_id=retailer,
-                                                        )))
+                                                        purchase_data_source=recset_group.purchase_data_source)))
     # commenting out as previous plans of plans of pursuing different architecture not on roadmap at least for now
     # unload_pid_path, send_time = unload_target_pid_path(account, market, retailer, algorithm, lookback_days)
     # writes the pid-pid relation to s3
