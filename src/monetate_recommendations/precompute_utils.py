@@ -321,7 +321,7 @@ WHERE account_id in (:account_ids)
     AND product_id NOT IN ('', 'null', 'NULL')
 GROUP BY 1, 2, 3, 4, 5
 """
-
+# TODO: test that this query makes sense/works
 GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 SELECT a.account_id, a.dataset_id, p.customer_id, p.product_id, max(p.time) as fact_time
@@ -490,24 +490,29 @@ def get_fact_time(lookback):
     return begin_fact_time, end_fact_time
 
 
-def create_helper_query(conn, accounts_to_process, lookback, algorithm, account, online_query, offline_purchase_query,
+def create_helper_query(conn, accounts_to_process, lookback, algorithm, account, query, offline_purchase_query,
                         purchase_data_source):
     begin_fact_time, end_fact_time = get_fact_time(lookback)
     if algorithm == 'purchase_also_purchase':
-        dataset_ids, accounts_datasets = get_dataset_ids_for_pos(accounts_to_process)
+        account_ids_dataset_ids = get_dataset_ids_for_pos(accounts_to_process)
+        # TODO: Do we need to fail when list above is empty??
         # offline only
         if purchase_data_source == "offline":
-            conn.execute(offline_purchase_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
-                     end_fact_time=end_fact_time, dataset_ids=dataset_ids, aids_dids=accounts_datasets)
+            conn.execute(offline_purchase_query, account_ids=accounts_to_process,
+                                      begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
+                                      aids_dids=account_ids_dataset_ids)
         # online only
         elif purchase_data_source == "online":
-            conn.execute(online_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
-                     end_fact_time=end_fact_time)
+            # online pap helper query
+            conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+                         end_fact_time=end_fact_time)
         # online_offline (execute both queries)
         else:
+            # offline helper query
             conn.execute(offline_purchase_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
-                         end_fact_time=end_fact_time, dataset_ids=dataset_ids, aids_dids=accounts_datasets)
-            conn.execute(online_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
+                         end_fact_time=end_fact_time, aids_dids=account_ids_dataset_ids)
+            # online pap helper query
+            conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
                          end_fact_time=end_fact_time)
     elif algorithm == 'view_also_view':
         conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
@@ -523,6 +528,7 @@ def create_helper_query(conn, accounts_to_process, lookback, algorithm, account,
         #TODO: availability is Adidas specific, need to change in the future to support all clients
         availability = "In Stock"
         conn.execute(query, retailer_id=retailer_id, dataset_id=dataset_id, availability=availability)
+
 
 def create_metric_table(conn, account_ids, lookback, algorithm, query):
     begin_fact_time, end_fact_time = get_fact_time(lookback)
@@ -881,10 +887,10 @@ def run_collab_metric_queries(conn, metric_table_query, algorithm, account, mark
             conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
                                                     retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
             # offline query
-            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PURCHASE_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
+            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PAP_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
                                                     retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
             # online_offline (union all + sum query)
-            conn.execute(text(precompute_purchase_also_purchase.AGGREGATED_ONLINE_OFFLINE_QUERY.format(algorithm=algorithm, account_id=account,
+            conn.execute(text(precompute_purchase_also_purchase.AGGREGATED_PAP_QUERY.format(algorithm=algorithm, account_id=account,
                                                     market_id=market, retailer_id=retailer, lookback_days=lookback_days,
                                                     purchase_data_source=purchase_data_source)))
 
@@ -893,7 +899,7 @@ def run_collab_metric_queries(conn, metric_table_query, algorithm, account, mark
                                                         retailer_id=retailer, lookback_days=lookback_days)),
                     minimum_count=min_count)
         elif purchase_data_source == "offline":
-            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PURCHASE_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
+            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PAP_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
                                                         retailer_id=retailer, lookback_days=lookback_days)),
                                                         minimum_count=min_count)
     else:
@@ -904,14 +910,12 @@ def run_collab_metric_queries(conn, metric_table_query, algorithm, account, mark
 
 def get_dataset_ids_for_pos(account_ids):
     # [(account_id, dataset_id), ...]
-    account_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
+    account_ids_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
                                               pos_dataset_id__isnull=False).values_list("account_id", "pos_dataset_id"))
     # converts list of tuples into list
     # [account_id, dataset_id]
-    flattened_aids_dids = [item for tup_list in account_dataset_ids for item in tup_list]
-    # grabs data_set ids
-    dataset_ids_list = [row[1] for row in account_dataset_ids]
-    return dataset_ids_list, flattened_aids_dids
+    flattened_aids_dids = [item for tup_list in account_ids_dataset_ids for item in tup_list]
+    return flattened_aids_dids
 
 
 def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
@@ -935,6 +939,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
     create_helper_query(conn, account_ids, lookback_days, algorithm, recset_group.account,
                         text(helper_query.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)),
+                        # offline query for pap
                         text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)),
                         recset_group.purchase_data_source)

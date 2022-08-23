@@ -9,7 +9,7 @@ from monetate_recommendations import precompute_utils
 log.configure_script_log('precompute_PAP_algorithm')
 #TODO: update the join on product catalog, we are multiplying our counts with the skus
 
-AGGREGATED_ONLINE_OFFLINE_QUERY = """
+AGGREGATED_PAP_QUERY = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source} AS
 SELECT
     account_id,
@@ -54,8 +54,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
     HAVING count(*) >= :minimum_count
 """
 
-# TODO: Will have to slightly adjust query called here to create temp. table for offline only..
-OFFLINE_PURCHASE_QUERY = """
+OFFLINE_PAP_QUERY = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_offline AS
     SELECT
         p1.account_id account_id,
