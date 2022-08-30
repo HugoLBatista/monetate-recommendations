@@ -482,6 +482,16 @@ def get_recset_account_ids(recset):
     return account_ids
 
 
+def get_dataset_ids_for_pos(account_ids):
+    # [(account_id, dataset_id), ...]
+    account_ids_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
+                                              pos_dataset_id__isnull=False).values_list("account_id", "pos_dataset_id"))
+    # converts list of tuples into list
+    # [account_id, dataset_id]
+    flattened_aids_dids = [item for tup_list in account_ids_dataset_ids for item in tup_list]
+    return flattened_aids_dids
+
+
 def get_unload_sql(geo_target, has_dynamic_filter):
     """
     gets the SQL snippets for geo partitioning of precompute non-contextual models as well as sql snippets for
