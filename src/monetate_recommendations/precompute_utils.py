@@ -1,14 +1,11 @@
 from django.conf import settings
 from django.db.models import Q
-import contextlib
 import os
 import datetime
 import json
 import binascii
 import bisect
 import six
-from sqlalchemy import create_engine
-from sqlalchemy.pool import NullPool
 from copy import deepcopy
 from sqlalchemy.sql import text
 from monetate.common import log, job_timing
@@ -20,8 +17,6 @@ import monetate.dio.models as dio_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
-from monetate_recommendations import supported_weights_expression
-import precompute_purchase_also_purchase
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES
 from .supported_prefilter_expression import FILTER_MAP
 
@@ -309,70 +304,7 @@ WITH
     )
     WHERE rank <= 50
 """
-# account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
-# example  6814_None_None
-GET_LAST_PURCHASE_PER_MID_AND_PID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, max(fact_time) as fact_time
-FROM m_dedup_purchase_line
-WHERE account_id in (:account_ids)
-    AND fact_time >= :begin_fact_time
-    /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
-    AND product_id NOT IN ('', 'null', 'NULL')
-GROUP BY 1, 2, 3, 4, 5
-"""
-# TODO: test that this query makes sense/works
-GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-SELECT a.account_id, a.dataset_id, p.customer_id, p.product_id, max(p.time) as fact_time
-FROM (
-    SELECT account_id, dataset_id
-    FROM (VALUES (:aids_dids)) t(account_id, dataset_id)
-) a
-RIGHT JOIN dio_purchase p
-ON p.dataset_id = a.dataset_id
-    /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
-    AND product_id NOT IN ('', 'null', 'NULL')
-GROUP BY 1, 2, 3, 4
-HAVING fact_time >= :begin_fact_time
-"""
 
-# account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
-# example  6814_None_None
-GET_EARLIEST_VIEW_PER_MID_AND_PID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-WITH device_earliest_product_view AS (
-    SELECT account_id, mid_epoch, mid_ts, mid_rnd, product_id, min(fact_time) fact_time
-    FROM fact_product_view
-    WHERE account_id in (:account_ids)
-        AND fact_time >= :begin_fact_time
-        /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
-        AND product_id NOT IN ('', 'null', 'NULL')
-    GROUP BY 1, 2, 3, 4, 5
-),
-filtered_devices AS (
-    /* Exclude devices viewing more than 1000 distinct products per month */
-    SELECT account_id, mid_epoch, mid_ts, mid_rnd, count(*)
-    FROM device_earliest_product_view
-    GROUP BY 1, 2, 3, 4
-    HAVING count(*) < (:lookback / 30.0 * 1000)
-)
-SELECT p.account_id, p.mid_epoch, p.mid_ts, p.mid_rnd, p.product_id, p.fact_time
-FROM device_earliest_product_view p
-JOIN filtered_devices fd
-    ON fd.account_id = p.account_id
-    AND fd.mid_epoch = p.mid_epoch
-    AND fd.mid_ts = p.mid_ts
-    AND fd.mid_rnd = p.mid_rnd
-"""
-
-# Retrieving the products only if they are available in stock for the given retailer
-GET_RETAILER_PRODUCT_CATALOG = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-SELECT *
-FROM product_catalog
-WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability)=lower(:availability)
-"""
 
 def parse_supported_filters(filter_dict, catalog_fields, algo_type):
 
@@ -488,46 +420,6 @@ def get_fact_time(lookback):
         hour=0, minute=0, second=0, microsecond=0) - datetime.timedelta(days=lookback)
     end_fact_time = datetime.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     return begin_fact_time, end_fact_time
-
-
-def create_helper_query(conn, accounts_to_process, lookback, algorithm, account, query, offline_purchase_query,
-                        purchase_data_source):
-    begin_fact_time, end_fact_time = get_fact_time(lookback)
-    if algorithm == 'purchase_also_purchase':
-        account_ids_dataset_ids = get_dataset_ids_for_pos(accounts_to_process)
-        # TODO: Do we need to fail when list above is empty??
-        # offline only
-        if purchase_data_source == "offline":
-            conn.execute(offline_purchase_query, account_ids=accounts_to_process,
-                                      begin_fact_time=begin_fact_time, end_fact_time=end_fact_time,
-                                      aids_dids=account_ids_dataset_ids)
-        # online only
-        elif purchase_data_source == "online":
-            # online pap helper query
-            conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
-                         end_fact_time=end_fact_time)
-        # online_offline (execute both queries)
-        else:
-            # offline helper query
-            conn.execute(offline_purchase_query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
-                         end_fact_time=end_fact_time, aids_dids=account_ids_dataset_ids)
-            # online pap helper query
-            conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
-                         end_fact_time=end_fact_time)
-    elif algorithm == 'view_also_view':
-        conn.execute(query, account_ids=accounts_to_process, begin_fact_time=begin_fact_time,
-                     end_fact_time=end_fact_time, lookback=lookback)
-    elif algorithm == 'similar_products_v2':
-        # for similar product algo we always expect the account id to be present. since we dont support
-        # market
-        # we want to fail if the account is None
-        if account is None:
-            raise ValueError('Account has no Account ID for similar products execution, using None')
-        retailer_id = account.retailer_id
-        dataset_id = dio_models.DefaultAccountCatalog.objects.get(account=account.id).schema.id
-        #TODO: availability is Adidas specific, need to change in the future to support all clients
-        availability = "In Stock"
-        conn.execute(query, retailer_id=retailer_id, dataset_id=dataset_id, availability=availability)
 
 
 def create_metric_table(conn, account_ids, lookback, algorithm, query):
@@ -689,18 +581,18 @@ def get_account_ids_for_market_driven_recsets(recset, account_id):
         return [account_id]
 
 
-def get_account_ids_for_processing(recommendation):
-    if recommendation.market:
-        account_ids = [account.id for account in recommendation.market.accounts.all()]
+def get_account_ids_for_processing(queue_entry):
+    if queue_entry.market:
+        account_ids = [account.id for account in queue_entry.market.accounts.all()]
         log.log_info('Market scoped recset, using {} accounts'.format(len(account_ids)))
         return account_ids
-    if recommendation.retailer:
-        account_ids = [account.id for account in recommendation.retailer.account_set.all()]
+    if queue_entry.retailer:
+        account_ids = [account.id for account in queue_entry.retailer.account_set.all()]
         log.log_info('Retailer scoped recset, using {} accounts'.format(len(account_ids)))
         return account_ids
     else:
-        log.log_info('Account scoped recset for account {}'.format(recommendation.account))
-        return [recommendation.account.id]
+        log.log_info('Account scoped recset for account {}'.format(queue_entry.account))
+        return [queue_entry.account.id]
 
 
 def get_recset_ids(recset_group):
@@ -822,23 +714,6 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
     return result_counts
 
 
-def initialize_process_collab_algorithm(recsets_group, algorithm, algorithm_query, algo_helper_query):
-    result_counts = []
-    # Disable pooling so temp tables do not persist on connections returned to pool
-    engine = create_engine(settings.SNOWFLAKE_QUERY_DSN, poolclass=NullPool)
-    with job_timing.job_timer('precompute_{}_algorithm'.format(algorithm)),\
-            contextlib.closing(engine.connect()) as warehouse_conn:
-        warehouse_conn.execute("use warehouse {}".format(
-            getattr(settings, 'RECS_COLLAB_QUERY_WH', os.environ.get('RECS_COLLAB_QUERY_WH', 'QUERY4_WH'))))
-        for recset_group in recsets_group:
-            if recset_group and recset_group.algorithm == algorithm:
-                log.log_info('processing recset {}'.format(recset_group.id))
-                result_counts.append(
-                    process_collab_algorithm(warehouse_conn, recset_group, algorithm_query, algo_helper_query))
-    log.log_info('ending precompute_{}_algorithm process'.format(algorithm))
-    return result_counts
-
-
 def get_account_ids_for_catalog_join_and_output(recset, queue_account):
     """
     For a given recset, return the account/s to process
@@ -860,122 +735,15 @@ def get_account_ids_for_catalog_join_and_output(recset, queue_account):
             return [recset.account]
     return []
 
-def get_similar_products_weights(account, market, retailer, lookback_days):
-    recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account)
-    weights_json = json.loads(recommendation_settings[0].similar_product_weights_json) if recommendation_settings else None
-    if weights_json is None:
-        raise ValueError('Account {} has no weights JSON for similar products execution, using None'.format(account))
-    weights_json = weights_json["enabled_catalog_attributes"]
-    catalog_id = dio_models.DefaultAccountCatalog.objects.get(account=account).schema.id
-    weights_sql, selected_attributes = supported_weights_expression.get_weights_query(weights_json, catalog_id, \
-                                                                                      account, market, retailer,
-                                                                                      lookback_days)
-    return weights_sql, selected_attributes
 
-
-def run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count,
-                              purchase_data_source):
-    if algorithm == 'similar_products_v2':
-        weights_sql, selected_attributes = get_similar_products_weights(account, market, retailer, lookback_days)
-        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days,
-                                                    weights=weights_sql, selected_attributes=selected_attributes
-                                                    )))
-    elif algorithm == "purchase_also_purchase":
-        if purchase_data_source == "online_offline":
-            # online query
-            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
-            # offline query
-            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PAP_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
-            # online_offline (union all + sum query)
-            conn.execute(text(precompute_purchase_also_purchase.AGGREGATED_PAP_QUERY.format(algorithm=algorithm, account_id=account,
-                                                    market_id=market, retailer_id=retailer, lookback_days=lookback_days,
-                                                    purchase_data_source=purchase_data_source)))
-
-        elif purchase_data_source == "online":
-            conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                        retailer_id=retailer, lookback_days=lookback_days)),
-                    minimum_count=min_count)
-        elif purchase_data_source == "offline":
-            conn.execute(text(precompute_purchase_also_purchase.OFFLINE_PAP_QUERY.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                        retailer_id=retailer, lookback_days=lookback_days)),
-                                                        minimum_count=min_count)
-    else:
-        conn.execute(text(metric_table_query.format(algorithm=algorithm, account_id=account, market_id=market,
-                                                    retailer_id=retailer, lookback_days=lookback_days)),
-                     minimum_count=min_count)
-
-
-def get_dataset_ids_for_pos(account_ids):
-    # [(account_id, dataset_id), ...]
-    account_ids_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
-                                              pos_dataset_id__isnull=False).values_list("account_id", "pos_dataset_id"))
-    # converts list of tuples into list
-    # [account_id, dataset_id]
-    flattened_aids_dids = [item for tup_list in account_ids_dataset_ids for item in tup_list]
-    return flattened_aids_dids
-
-
-def process_collab_algorithm(conn, recset_group, metric_table_query, helper_query):
+def process_collab_recsets(conn, queue_entry, account, market, retailer):
     result_counts = []
-    # since the queue table currently has accounts that do not have the precompute collab feature flag
-    # we don't want to process these queue entries
-    if recset_group.account and \
-            not recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING):
-        log.log_info("skipping results for recset group with id {} - does not have collab feature flag"
-                     .format(recset_group.id))
-        return result_counts
-    account = recset_group.account.id if recset_group.account else None
-    market = recset_group.market.id if recset_group.market else None
-    retailer = recset_group.retailer.id if recset_group.retailer else None
-    algorithm = recset_group.algorithm
-    lookback_days = recset_group.lookback_days
-    log.log_info('Querying results for recset group {}'.format(recset_group.id))
-    log.log_info("Processing algorithm {}, lookback {}".format(algorithm, lookback_days))
-    account_ids = get_account_ids_for_processing(recset_group)
-    # this query creates a temp table with all the purchases or views in given lookback period
-    create_helper_query(conn, account_ids, lookback_days, algorithm, recset_group.account,
-                        text(helper_query.format(account_id=account, market_id=market,
-                                                 retailer_id=retailer, lookback_days=lookback_days)),
-                        # offline query for pap
-                        text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
-                                                 retailer_id=retailer, lookback_days=lookback_days)),
-                        recset_group.purchase_data_source)
-    # if pap, account level, and account has min threshold feature flag use min threshold else set min_count to 1
-    # TODO: Handle Min. PAP feature flag later on like catalog
-    min_count = MIN_PURCHASE_THRESHOLD \
-        if recset_group.account \
-           and recset_group.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) \
-           and algorithm == 'purchase_also_purchase' else 1
-    # this query creates a pid pid relation with a score
-    run_collab_metric_queries(conn, metric_table_query, algorithm, account, market, retailer, lookback_days, min_count,
-                              recset_group.purchase_data_source)
-
-    # this query add normalized score
-    conn.execute(text(PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
-                                                        lookback_days=lookback_days, market_id=market,
-                                                        retailer_id=retailer,
-                                                        purchase_data_source=recset_group.purchase_data_source)))
-    # commenting out as previous plans of plans of pursuing different architecture not on roadmap at least for now
-    # unload_pid_path, send_time = unload_target_pid_path(account, market, retailer, algorithm, lookback_days)
-    # writes the pid-pid relation to s3
-    # conn.execute(text(SNOWFLAKE_UNLOAD_PID_PID.format(algorithm=algorithm, account_id=account,
-    #                                                   lookback_days=lookback_days, market_id=market,
-    #                                                   retailer_id=retailer)),
-    #              account_id=account, market_id=market,
-    #              retailer_id=retailer,
-    #              sent_time=send_time,
-    #              target=unload_pid_path,
-    #              algorithm=algorithm,
-    #              lookback_days=lookback_days)
-
-    recsets = get_recset_ids(recset_group)
+    recsets = get_recset_ids(queue_entry)
     for recset in recsets:
-        account_ids = get_account_ids_for_catalog_join_and_output(recset, recset_group.account)
+        account_ids = get_account_ids_for_catalog_join_and_output(recset, queue_entry.account)
         for account_id in account_ids:
-            log.log_info("Processing recset id {}, account id {}".format(recset.id, account_id))
+            log.log_info("Processing recset id {}, account id {} for queue entry {}"
+                         .format(recset.id, account_id, queue_entry.id))
             recommendation_settings = AccountRecommendationSetting.objects.filter(account_id=account_id)
             global_filter_json = recommendation_settings[0].filter_json if recommendation_settings else u'{"type":"or","filters":[]}'
 
@@ -1003,9 +771,8 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                          **static_filter_variables)
 
             unload_path, send_time = create_unload_target_path(account_id.id, recset.id)
-            result_counts.append(get_single_value_query(conn.execute(text(RESULT_COUNT.format(recset_id=recset.id,
-                                                                                              account_id=account_id.id,
-                                                                                              ))), 0))
+            result_counts.append(get_single_value_query(conn.execute(text(
+                RESULT_COUNT.format(recset_id=recset.id,account_id=account_id.id,))), 0))
             # this query write the pid-sku relation to s3
             conn.execute(text(SNOWFLAKE_UNLOAD_COLLAB.format(recset_id=recset.id, account_id=account_id.id)),
                          shard_key=get_shard_key(account_id.id),
@@ -1013,6 +780,7 @@ def process_collab_algorithm(conn, recset_group, metric_table_query, helper_quer
                          recset_id=recset.id,
                          sent_time=send_time,
                          target=unload_path)
-            log.log_info("Finished processing recset id {}, account id {}".format(recset.id, account_id))
+            log.log_info("Finished processing recset id {}, number of rows {} and file path {}".format(
+                recset.id, result_counts[-1], unload_path))
 
     return result_counts
