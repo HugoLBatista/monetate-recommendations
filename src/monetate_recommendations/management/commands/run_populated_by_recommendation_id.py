@@ -10,7 +10,7 @@ class Command(BaseCommand):
     help = "Run precompute processes by recset id"
 
     def add_arguments(self, parser):
-        parser.add_argument('--queue_entry_ids', default=None, dest='recommendation_ids', nargs='+',
+        parser.add_argument('--queue_entry_ids', default=None, dest='queue_entry_ids', nargs='+',
                             help='process all for the specified recommendation ids', type=int)
 
     def handle(self, *args, **options):
