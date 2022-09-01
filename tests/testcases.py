@@ -72,6 +72,7 @@ class RecsTestCase(SnowflakeTestCase):
         'm_dedup_purchase_line',
         'm_session_first_geo',
         'product_catalog',
+        'dio_purchase'
     ]
 
     @classmethod
@@ -285,6 +286,11 @@ class RecsTestCaseWithData(RecsTestCase):
         within_7_day = datetime.now() - timedelta(days=5)
         within_30_day = datetime.now() - timedelta(days=29)
 
+        # offline customers
+        customer0 = "customer0"
+        customer1 = "customer1"
+        customer2 = "customer2"
+
         v = [
             (mid0, within_7_day, 'TP-00003'),
             (mid0, within_7_day, 'TP-00004'),
@@ -349,6 +355,42 @@ class RecsTestCaseWithData(RecsTestCase):
              currency_unit_price, usd_unit_price, usd_unit_cost)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, *[(e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[4], 1, e[2], e[3], 1, 'USD', 3.0, 3.0, 3.0) for e in p]
+        )
+
+        offline_purchases = [
+            (cls.retailer_id, 1, customer0, within_30_day, 'purch_1', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_2', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 3, customer2, within_30_day, 'purch_3', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 4, customer0, within_30_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+
+            (cls.retailer_id, 5, customer0, within_7_day, 'purch_1', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 6, customer1, within_7_day, 'purch_2', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 1, customer2, within_7_day, 'purch_3', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer1, within_7_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+
+            (cls.retailer_id, 3, customer0, within_30_day, 'purch_2', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 4, customer1, within_30_day, 'purch_3', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 5, customer2, within_30_day, 'purch_1', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 6, customer2, within_30_day, 'purch_2', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 1, customer0, within_30_day, 'purch_3', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+
+            (cls.retailer_id, 3, customer0, within_7_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 4, customer1, within_7_day, 'purch_5', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 5, customer2, within_7_day, 'purch_1', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 6, customer0, within_7_day, 'purch_2', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 1, customer2, within_7_day, 'purch_3', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer1, within_7_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+        ]
+
+        cls.conn.execute(
+            """
+            INSERT INTO dio_purchase
+            (retailer_id, dataset_id, customer_id, time, purchase_id, line, product_id, sku, currency,
+            currency_unit_price, quantity, store_id, update_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [(e[0], e[1], e[2], e[3], e[4], 1, e[5], e[6], 'USD', 3.0, 1, 2, e[3]) for e in offline_purchases]
         )
 
     @patch_invalidations

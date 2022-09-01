@@ -56,6 +56,7 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
                     product_catalog=dio_models.Schema.objects.get(id=cls.product_catalog_id),
                     retailer_market_scope=cls._setup_retailer_market(recset['retailer_market_scope'], recset['market']),
                     market=cls._setup_market(recset['market']),
+                    purchase_data_source='online'
                 )
                 # for global recset which is not market we need to create a row in recommendation_set_dataset table
                 if rec.is_retailer_tenanted and not rec.is_market_or_retailer_driven_ds:
@@ -74,6 +75,7 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
                     retailer=rec.retailer if rec.retailer_market_scope else None,
                     algorithm=rec.algorithm,
                     lookback_days=rec.lookback_days,
+                    purchase_data_source='online'
                 )
 
 
@@ -83,12 +85,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='purchase_also_purchase',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         # commenting out as we are currently not using pid_pid output
@@ -133,12 +137,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=False) |
+              retailer_market_scope=False,
+              purchase_data_source="online") |
             Q(algorithm='purchase_also_purchase',
               account=None,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=False)
+              retailer_market_scope=False,
+              purchase_data_source="online")
         )
         # commenting out as we are currently not using pid_pid output
         # pid_pid_expected_results = [
@@ -169,12 +175,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=True) |
+              retailer_market_scope=True,
+              purchase_data_source="online") |
             Q(algorithm='purchase_also_purchase',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=True)
+              retailer_market_scope=True,
+              purchase_data_source="online")
         )
         # commenting out as we are currently not using pid_pid output
         # pid_pid_expected_results = [
@@ -204,12 +212,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='purchase_also_purchase',
               account=None,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         # commenting out as we are currently not using pid_pid output
@@ -231,4 +241,33 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
             ]
         self._run_collab_recs_test('purchase_also_purchase', 7, recsets, expected_results,
                                    account=self.account)
+
+        def test_7_day_purchase_also_purchase_account_level_online_offline_pos(self):
+            recsets = recs_models.RecommendationSet.objects.filter(
+                Q(algorithm='purchase_also_purchase',
+                  account=self.account,
+                  lookback_days=30,
+                  market=None,
+                  retailer_market_scope=None,
+                  purchase_data_source="online_offline") |
+                Q(algorithm='purchase_also_purchase',
+                  account=None,
+                  lookback_days=30,
+                  market=None,
+                  retailer_market_scope=None,
+                  purchase_data_source="online_offline")
+            )
+
+            expected_results = {}
+            for r in recsets:
+                expected_results[r.id] = [
+                    ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3)]),
+                    ('TP-00004',
+                     [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
+                    ('TP-00003', [('SKU-00002', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+                    ('TP-00005', [('SKU-00004', 1)]),
+                    ('TP-00002', [('SKU-00003', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+                ]
+            self._run_collab_recs_test('purchase_also_purchase', 7, recsets, expected_results,
+                                       account=self.account)
 

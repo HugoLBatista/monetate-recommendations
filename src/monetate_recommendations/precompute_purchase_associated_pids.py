@@ -2,6 +2,7 @@ from sqlalchemy.sql import text
 import precompute_utils
 from monetate.common import log, job_timing
 import monetate.retailer.models as retailer_models
+from monetate.recs.models import AccountRecommendationSetting
 
 MIN_PURCHASE_THRESHOLD = 3
 
@@ -23,11 +24,14 @@ GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 SELECT a.account_id, a.dataset_id, p.customer_id, p.product_id, max(p.time) as fact_time
 FROM (
-    SELECT account_id, dataset_id
+    SELECT t.account_id, t.dataset_id, d.cutoff_time
     FROM (VALUES (:aids_dids)) t(account_id, dataset_id)
+    JOIN config_dataset_data_expiration d
+    ON t.dataset_id = d.dataset_id
 ) a
 JOIN dio_purchase p
 ON p.dataset_id = a.dataset_id
+    AND p.update_time >= a.cutoff_time
     /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
     AND product_id NOT IN ('', 'null', 'NULL')
 GROUP BY 1, 2, 3, 4
@@ -105,6 +109,23 @@ QUERY_DISPATCH = {
     }
 }
 
+#TODO:
+# SOURCE_DATA_DISPATCH = {
+#     'online': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID,
+#     'offline': GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID,
+#     # 'online_offline': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID + GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
+# }
+
+
+def get_dataset_ids_for_pos(account_ids):
+    # [(account_id, dataset_id), ...]
+    account_ids_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
+                                              pos_dataset_id__isnull=False).values_list("account_id", "pos_dataset_id"))
+    # converts list of tuples into list
+    # [account_id, dataset_id]
+    flattened_aids_dids = [item for tup_list in account_ids_dataset_ids for item in tup_list]
+    return flattened_aids_dids
+
 
 def process_purchase_collab_algorithm(conn, queue_entry):
     result_counts = []
@@ -129,7 +150,7 @@ def process_purchase_collab_algorithm(conn, queue_entry):
         if queue_entry.account \
            and queue_entry.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) else 1
     # get account ids, dataset ids for pos [(account_id, dataset_id)...]
-    account_ids_dataset_ids = precompute_utils.get_dataset_ids_for_pos(account_ids)
+    account_ids_dataset_ids = get_dataset_ids_for_pos(account_ids)
     if not account_ids_dataset_ids:
         log.log_info("Account/s {} has/have no pos dataset ids".format(account_ids))
     # TODO: Do we need to fail when list above is empty??
