@@ -16,7 +16,7 @@ FROM product_catalog
 WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability)=lower(:availability)
 """
 
-#TODO: update the join on product catalog, we are multiplying our counts with the skus
+
 SIMILAR_PRODUCTS_V2 = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
 WITH truth_table as (SELECT pc1.item_group_id as pid1, pc2.item_group_id as pid2,
