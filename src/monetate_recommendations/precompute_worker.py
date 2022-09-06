@@ -94,7 +94,7 @@ class PrecomputeCombinedThread(threading.Thread):
         try:
             algorithm = self.recset_group.algorithm
             if algorithm in precompute_collab_algo_map.FUNC_MAP.keys():
-                self.result = precompute_collab_algo_map.FUNC_MAP[algorithm]([self.recset_group])[0]
+                self.result = precompute_collab_algo_map.initialize_collab_algorithm([self.recset_group], algorithm)[0]
             else:
                 self.message = 'invalid precompute algorithm {}'.format(algorithm)
                 self.recset_group.status = precompute_constants.STATUS_SKIPPED

@@ -11,7 +11,7 @@ from monetate.test.testcases import SnowflakeTestCase
 import monetate.test.warehouse_utils as warehouse_utils
 from monetate_recommendations import precompute_utils
 from monetate_recommendations.precompute_algo_map import FUNC_MAP
-from monetate_recommendations.precompute_collab_algo_map import FUNC_MAP as COLLAB_FUNC_MAP
+from monetate_recommendations.precompute_collab_algo_map import initialize_collab_algorithm
 import monetate.dio.models as dio_models
 from monetate.retailer.cache import invalidation_context
 import monetate.retailer.models as retailer_models
@@ -396,7 +396,7 @@ class RecsTestCaseWithData(RecsTestCase):
                            autospec=True) as mock_pid_suffix:
             mock_pid_suffix.return_value = unload_pid_path, pid_send_time
             mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
-            COLLAB_FUNC_MAP[algorithm]([recset_group])
+            initialize_collab_algorithm([recset_group], algorithm)
 
         # test pid - pid (recset group)
         # commenting out as we are currently not using pid_pid output
