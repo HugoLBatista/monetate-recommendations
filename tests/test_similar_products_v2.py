@@ -67,6 +67,7 @@ class SimilarProductsV2TestCase(RecsTestCaseWithData):
                     retailer=rec.retailer if rec.retailer_market_scope else None,
                     algorithm=rec.algorithm,
                     lookback_days=rec.lookback_days,
+                    purchase_data_source="online"
                 )
 
     def test_default_attribute_weights_enabled_similar_products_v2(self):
@@ -75,12 +76,14 @@ class SimilarProductsV2TestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='similar_products_v2',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         similar_product_weights_json=json.dumps({"enabled_catalog_attributes":
@@ -115,12 +118,14 @@ class SimilarProductsV2TestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='similar_products_v2',
               account=None,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         similar_product_weights_json=json.dumps({"enabled_catalog_attributes":
@@ -147,12 +152,14 @@ class SimilarProductsV2TestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=2,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='similar_products_v2',
               account=None,
               lookback_days=2,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         similar_product_weights_json=json.dumps({"enabled_catalog_attributes":

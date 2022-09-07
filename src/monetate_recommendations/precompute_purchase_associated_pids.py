@@ -158,8 +158,7 @@ def process_purchase_collab_algorithm(conn, queue_entry):
         # execute offline helper and main pap queries
         conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
                                                  retailer_id=retailer, lookback_days=lookback_days)),
-                                                 account_ids=account_ids, begin_fact_time=begin_fact_time,
-                                                 end_fact_time=end_fact_time, aids_dids=account_ids_dataset_ids)
+                                                 begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
         conn.execute(text(QUERY_DISPATCH[algorithm][queue_entry.purchase_data_source].
                           format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
                                  lookback_days=lookback_days)), minimum_count=min_count)
@@ -199,7 +198,6 @@ def process_purchase_collab_algorithm(conn, queue_entry):
     conn.execute(text(precompute_utils.PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                  lookback_days=lookback_days, market_id=market, retailer_id=retailer,
                                                  purchase_data_source=queue_entry.purchase_data_source)))
-
     result_counts = precompute_utils.process_collab_recsets(conn, queue_entry, account, market, retailer)
 
     log.log_info('Completed processing queue entry {}'.format(queue_entry.id))

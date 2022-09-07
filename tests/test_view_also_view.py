@@ -73,6 +73,7 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                     retailer=rec.retailer if rec.retailer_market_scope else None,
                     algorithm=rec.algorithm,
                     lookback_days=rec.lookback_days,
+                    purchase_data_source="online"
                 )
 
     def test_30_day_view_also_view_account_level(self):
@@ -81,12 +82,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         # commenting out as we are currently not using pid_pid output
@@ -130,12 +133,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=False) |
+              retailer_market_scope=False,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=False)
+              retailer_market_scope=False,
+              purchase_data_source="online")
         )
         # commenting out as we are currently not using pid_pid output
         # pid_pid_expected_results = [
@@ -174,12 +179,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=True) |
+              retailer_market_scope=True,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=True)
+              retailer_market_scope=True,
+              purchase_data_source="online")
         )
         # commenting out as we are currently not using pid_pid output
         # pid_pid_expected_results = [
@@ -217,12 +224,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         # commenting out as we are currently not using pid_pid output

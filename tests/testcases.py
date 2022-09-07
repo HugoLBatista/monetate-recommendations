@@ -165,7 +165,9 @@ class RecsTestCase(SnowflakeTestCase):
             VALUES
                 (%s, %s, %s, %s)
             """,
-            (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30))
+            (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30)),
+            # for pos join
+            (21, 2, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30))
         )
 
     @patch_invalidations
@@ -358,29 +360,29 @@ class RecsTestCaseWithData(RecsTestCase):
         )
 
         offline_purchases = [
-            (cls.retailer_id, 1, customer0, within_30_day, 'purch_1', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 2, customer1, within_30_day, 'purch_2', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 3, customer2, within_30_day, 'purch_3', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 4, customer0, within_30_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_4', 'TP-00004', 'SKU-00001'),
 
-            (cls.retailer_id, 5, customer0, within_7_day, 'purch_1', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 6, customer1, within_7_day, 'purch_2', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 1, customer2, within_7_day, 'purch_3', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 2, customer1, within_7_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
 
-            (cls.retailer_id, 3, customer0, within_30_day, 'purch_2', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 4, customer1, within_30_day, 'purch_3', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 5, customer2, within_30_day, 'purch_1', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 6, customer2, within_30_day, 'purch_2', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 1, customer0, within_30_day, 'purch_3', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 2, customer1, within_30_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer1, within_7_day, 'purch_2', 'TP-00002', 'SKU-00005'),
+            (cls.retailer_id, 2, customer1, within_7_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
 
-            (cls.retailer_id, 3, customer0, within_7_day, 'purch_4', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 4, customer1, within_7_day, 'purch_5', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 5, customer2, within_7_day, 'purch_1', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 6, customer0, within_7_day, 'purch_2', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 1, customer2, within_7_day, 'purch_3', 'TP-00001', 'SKU-00001'),
-            (cls.retailer_id, 2, customer1, within_7_day, 'purch_4', 'TP-00001', 'SKU-00001'),
+            (cls.retailer_id, 2, customer2, within_7_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+            (cls.retailer_id, 2, customer2, within_7_day, 'purch_5', 'TP-00005', 'SKU-00002'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
         ]
 
         cls.conn.execute(
@@ -396,7 +398,7 @@ class RecsTestCaseWithData(RecsTestCase):
     @patch_invalidations
     def _run_collab_recs_test(self, algorithm, lookback, recsets, expected_results,
                               account=None, market=None, retailer=None,
-                              similar_product_weights_json=None):
+                              similar_product_weights_json=None, purchase_data_source="online"):
 
         recset_group = recs_models.PrecomputeQueue.objects.get(
                 account=account,
@@ -404,6 +406,7 @@ class RecsTestCaseWithData(RecsTestCase):
                 retailer=retailer,
                 algorithm=algorithm,
                 lookback_days=lookback,
+                purchase_data_source=purchase_data_source
             )
 
         # Insert row into config to mock out the similar_product_weights_json setting
@@ -415,6 +418,7 @@ class RecsTestCaseWithData(RecsTestCase):
             lookback=lookback,
             filter_json='{"type": "or", "filters": []}',
             similar_product_weights_json=similar_product_weights_json,
+            pos_dataset_id=2
         )
         unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group.account,
                                                                                  recset_group.market,
