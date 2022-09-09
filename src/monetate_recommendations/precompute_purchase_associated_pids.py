@@ -102,19 +102,19 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
     HAVING count(*) >= :minimum_count
 """
 
-
-QUERY_DISPATCH = {
-    'purchase_also_purchase': {
-        "online_offline": ONLINE_OFFLINE_PAP_QUERY, "online": ONLINE_PAP_QUERY, "offline": OFFLINE_PAP_QUERY
-    }
+# TODO: Refactor online_offline to call online and offline query
+PAP_QUERY_DISPATCH = {
+    "online_offline": ONLINE_OFFLINE_PAP_QUERY,
+    "online": ONLINE_PAP_QUERY,
+    "offline": OFFLINE_PAP_QUERY,
 }
 
-#TODO:
-# SOURCE_DATA_DISPATCH = {
-#     'online': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID,
-#     'offline': GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID,
-#     # 'online_offline': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID + GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
-# }
+# TODO: Refactor online_offline to call online and offline helper queries
+SOURCE_DATA_DISPATCH = {
+    'online': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID,
+    'offline': GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID,
+    # 'online_offline': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID + GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
+}
 
 
 def get_dataset_ids_for_pos(account_ids):
@@ -125,6 +125,41 @@ def get_dataset_ids_for_pos(account_ids):
     # [account_id, dataset_id]
     flattened_aids_dids = [item for tup_list in account_ids_dataset_ids for item in tup_list]
     return flattened_aids_dids
+
+
+def run_pap_main_and_helper_queries(account, account_ids, market, retailer, lookback_days, algorithm,
+                                    purchase_data_source, begin_fact_time, account_ids_dataset_ids, min_count, conn):
+    if purchase_data_source == "online_offline":
+        # run all queries
+        # execute both online and offline helper queries
+        conn.execute(text(GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID.format(account_id=account, market_id=market,
+                                                                          retailer_id=retailer,
+                                                                          lookback_days=lookback_days)),
+                     account_ids=account_ids,
+                     begin_fact_time=begin_fact_time)
+        conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
+                                                                           retailer_id=retailer,
+                                                                           lookback_days=lookback_days)),
+                     account_ids=account_ids,
+                     begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
+        # execute both online and offline pap queries and then aggregate results into final union query
+        conn.execute(text(PAP_QUERY_DISPATCH["online"].
+                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
+                                 lookback_days=lookback_days)), minimum_count=min_count)
+        conn.execute(text(PAP_QUERY_DISPATCH["offline"].
+                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
+                                 lookback_days=lookback_days)), minimum_count=min_count)
+        conn.execute(text(PAP_QUERY_DISPATCH[purchase_data_source].
+                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
+                                 lookback_days=lookback_days, purchase_data_source=purchase_data_source)),
+                     minimum_count=min_count)
+    # offline only or online only
+    else:
+        conn.execute(text(SOURCE_DATA_DISPATCH[purchase_data_source].
+                          format(account_id=account, market_id=market, retailer_id=retailer, lookback_days=lookback_days)),
+                     begin_fact_time=begin_fact_time, account_ids=account_ids, aids_dids=account_ids_dataset_ids)
+        conn.execute(text(PAP_QUERY_DISPATCH[purchase_data_source].format(algorithm=algorithm, account_id=account,
+                     market_id=market, retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
 
 
 def process_purchase_collab_algorithm(conn, queue_entry):
@@ -141,6 +176,7 @@ def process_purchase_collab_algorithm(conn, queue_entry):
     retailer = queue_entry.retailer.id if queue_entry.retailer else None
     algorithm = queue_entry.algorithm
     lookback_days = queue_entry.lookback_days
+    purchase_data_source = queue_entry.purchase_data_source
     log.log_info('Processing queue entry {}'.format(queue_entry.id))
     log.log_info("Processing algorithm {}, lookback {}".format(algorithm, lookback_days))
     # get account ids based on whether the queue entry corresponds to a markets/retailer/account level recset
@@ -154,46 +190,8 @@ def process_purchase_collab_algorithm(conn, queue_entry):
     if not account_ids_dataset_ids:
         log.log_info("Account/s {} has/have no pos dataset ids".format(account_ids))
     # TODO: Do we need to fail when list above is empty??
-    if queue_entry.purchase_data_source == "offline":
-        # execute offline helper and main pap queries
-        conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
-                                                 retailer_id=retailer, lookback_days=lookback_days)),
-                                                 begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
-        conn.execute(text(QUERY_DISPATCH[algorithm][queue_entry.purchase_data_source].
-                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-                                 lookback_days=lookback_days)), minimum_count=min_count)
-
-    elif queue_entry.purchase_data_source == "online":
-        # execute online helper and main pap queries
-        conn.execute(text(GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID.format(account_id=account, market_id=market,
-                                                 retailer_id=retailer, lookback_days=lookback_days)),
-                                                 account_ids=account_ids, begin_fact_time=begin_fact_time,
-                                                 end_fact_time=end_fact_time)
-        conn.execute(text(QUERY_DISPATCH[algorithm][queue_entry.purchase_data_source].
-                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-                                 lookback_days=lookback_days)), minimum_count=min_count)
-
-    # online_offline
-    else:
-        # execute both online and offline helper queries
-        conn.execute(text(GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID.format(account_id=account, market_id=market,
-                      retailer_id=retailer, lookback_days=lookback_days)), account_ids=account_ids,
-                      begin_fact_time=begin_fact_time, end_fact_time=end_fact_time)
-        conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
-                      retailer_id=retailer, lookback_days=lookback_days)), account_ids=account_ids,
-                      begin_fact_time=begin_fact_time, end_fact_time=end_fact_time, aids_dids=account_ids_dataset_ids)
-        # execute both online and offline pap queries and then aggregate results into final union query
-        conn.execute(text(QUERY_DISPATCH[algorithm]["online"].
-                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-                                 lookback_days=lookback_days)), minimum_count=min_count)
-        conn.execute(text(QUERY_DISPATCH[algorithm]["offline"].
-                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-                                 lookback_days=lookback_days)), minimum_count=min_count)
-        conn.execute(text(QUERY_DISPATCH[algorithm][queue_entry.purchase_data_source].
-                      format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-                      lookback_days=lookback_days, purchase_data_source=queue_entry.purchase_data_source)),
-                      minimum_count=min_count)
-
+    run_pap_main_and_helper_queries(account, account_ids, market, retailer, lookback_days, algorithm,
+                                    purchase_data_source, begin_fact_time, account_ids_dataset_ids, min_count, conn)
     # normalize score
     conn.execute(text(precompute_utils.PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                  lookback_days=lookback_days, market_id=market, retailer_id=retailer,
