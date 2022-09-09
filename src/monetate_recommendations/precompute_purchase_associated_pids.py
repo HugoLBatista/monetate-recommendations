@@ -62,14 +62,7 @@ WITH intermediate_query AS (
             AND p1.product_id != p2.product_id
         GROUP BY 1, 2, 3
         HAVING count(*) >= :minimum_count  
-    )
-    UNION ALL
-    SELECT
-        account_id,
-        pid1,
-        pid2,
-        count(*) score
-    FROM (
+        UNION ALL
         SELECT
             p1.account_id account_id,
             p1.product_id pid1,
@@ -83,6 +76,7 @@ WITH intermediate_query AS (
         GROUP BY 1, 2, 3
         HAVING count(*) >= :minimum_count
     )
+    GROUP BY 1, 2, 3
 )
 SELECT account_id, pid1, pid2, sum(score) score
 FROM intermediate_query
@@ -153,25 +147,17 @@ def get_dataset_ids_for_pos(account_ids):
 def run_pap_main_and_helper_queries(account, account_ids, market, retailer, lookback_days, algorithm,
                                     purchase_data_source, begin_fact_time, account_ids_dataset_ids, min_count, conn):
     if purchase_data_source == "online_offline":
-        # run all queries
-        # execute both online and offline helper queries
+        # execute both online and offline helper queries and aggregated final papa query
         conn.execute(text(GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID.format(account_id=account, market_id=market,
                                                           retailer_id=retailer, lookback_days=lookback_days)),
                                                           account_ids=account_ids, begin_fact_time=begin_fact_time)
         conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
                                                            retailer_id=retailer,lookback_days=lookback_days)),
                      account_ids=account_ids, begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
-        # # execute both online and offline pap queries and then aggregate results into final union query
-        # conn.execute(text(PAP_QUERY_DISPATCH["online"].
-        #                   format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-        #                          lookback_days=lookback_days)), minimum_count=min_count)
-        # conn.execute(text(PAP_QUERY_DISPATCH["offline"].
-        #                   format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-        #                          lookback_days=lookback_days)), minimum_count=min_count)
         conn.execute(text(PAP_QUERY_DISPATCH[purchase_data_source].
                           format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
                                  lookback_days=lookback_days, purchase_data_source=purchase_data_source)),
-                                 minimum_count=min_count)
+                     minimum_count=min_count)
     # offline only or online only
     else:
         conn.execute(text(SOURCE_DATA_DISPATCH[purchase_data_source].
