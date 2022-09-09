@@ -41,28 +41,51 @@ HAVING fact_time >= :begin_fact_time
 
 ONLINE_OFFLINE_PAP_QUERY = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source} AS
-SELECT
-    account_id,
-    pid1,
-    pid2,
-    sum(score) score
-FROM (
+WITH intermediate_query AS (
     SELECT
         account_id,
         pid1,
         pid2,
         count(*) score
-    FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_online
-    GROUP BY 1, 2, 3
+    FROM (
+        SELECT
+            p1.account_id account_id,
+            p1.product_id pid1,
+            p2.product_id pid2,
+            count(*) score
+        FROM scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+        JOIN scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+            ON p1.account_id = p2.account_id
+            AND p1.mid_epoch = p2.mid_epoch
+            AND p1.mid_ts = p2.mid_ts
+            AND p1.mid_rnd = p2.mid_rnd
+            AND p1.product_id != p2.product_id
+        GROUP BY 1, 2, 3
+        HAVING count(*) >= :minimum_count  
+    )
     UNION ALL
     SELECT
         account_id,
         pid1,
         pid2,
         count(*) score
-    FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_offline
-    GROUP BY 1, 2, 3
-   )
+    FROM (
+        SELECT
+            p1.account_id account_id,
+            p1.product_id pid1,
+            p2.product_id pid2,
+            count(*) score
+        FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+        JOIN scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+            ON p1.dataset_id = p2.dataset_id
+            AND p1.customer_id = p2.customer_id
+            AND p1.product_id != p2.product_id
+        GROUP BY 1, 2, 3
+        HAVING count(*) >= :minimum_count
+    )
+)
+SELECT account_id, pid1, pid2, sum(score) score
+FROM intermediate_query
 GROUP BY 1, 2, 3
 """
 
@@ -133,26 +156,22 @@ def run_pap_main_and_helper_queries(account, account_ids, market, retailer, look
         # run all queries
         # execute both online and offline helper queries
         conn.execute(text(GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID.format(account_id=account, market_id=market,
-                                                                          retailer_id=retailer,
-                                                                          lookback_days=lookback_days)),
-                     account_ids=account_ids,
-                     begin_fact_time=begin_fact_time)
+                                                          retailer_id=retailer, lookback_days=lookback_days)),
+                                                          account_ids=account_ids, begin_fact_time=begin_fact_time)
         conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
-                                                                           retailer_id=retailer,
-                                                                           lookback_days=lookback_days)),
-                     account_ids=account_ids,
-                     begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
-        # execute both online and offline pap queries and then aggregate results into final union query
-        conn.execute(text(PAP_QUERY_DISPATCH["online"].
-                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-                                 lookback_days=lookback_days)), minimum_count=min_count)
-        conn.execute(text(PAP_QUERY_DISPATCH["offline"].
-                          format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
-                                 lookback_days=lookback_days)), minimum_count=min_count)
+                                                           retailer_id=retailer,lookback_days=lookback_days)),
+                     account_ids=account_ids, begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
+        # # execute both online and offline pap queries and then aggregate results into final union query
+        # conn.execute(text(PAP_QUERY_DISPATCH["online"].
+        #                   format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
+        #                          lookback_days=lookback_days)), minimum_count=min_count)
+        # conn.execute(text(PAP_QUERY_DISPATCH["offline"].
+        #                   format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
+        #                          lookback_days=lookback_days)), minimum_count=min_count)
         conn.execute(text(PAP_QUERY_DISPATCH[purchase_data_source].
                           format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
                                  lookback_days=lookback_days, purchase_data_source=purchase_data_source)),
-                     minimum_count=min_count)
+                                 minimum_count=min_count)
     # offline only or online only
     else:
         conn.execute(text(SOURCE_DATA_DISPATCH[purchase_data_source].
