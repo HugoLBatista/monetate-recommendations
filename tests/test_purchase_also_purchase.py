@@ -144,13 +144,13 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=None,
+              retailer_market_scope=False,
               purchase_data_source="online") |
             Q(algorithm='purchase_also_purchase',
               account=None,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=None,
+              retailer_market_scope=False,
               purchase_data_source="online")
         )
         # commenting out as we are currently not using pid_pid output
@@ -296,13 +296,12 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
 
         expected_results = {}
         for r in recsets:
-            # TODO: Fix AssertionError: 'SKU-00006' != u'SKU-00003'
             expected_results[r.id] = [
-                ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
-                ('TP-00001', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00004', 3), ('SKU-00003', 4), ('SKU-00002', 5)]),
-                ('TP-00003', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00004', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
+                ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+                ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
+                ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
                 ('TP-00005', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3), ('SKU-00001', 4)]),
-                ('TP-00002', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00004', 3), ('SKU-00003', 4), ('SKU-00001', 5)]),
+                ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
             ]
         self._run_collab_recs_test('purchase_also_purchase', 30, recsets, expected_results,
                                    account=self.account, purchase_data_source="online_offline")

@@ -418,7 +418,6 @@ class RecsTestCaseWithData(RecsTestCase):
             lookback=lookback,
             filter_json='{"type": "or", "filters": []}',
             similar_product_weights_json=similar_product_weights_json,
-            pos_dataset_id=2
         )
         unload_pid_path, pid_send_time = precompute_utils.unload_target_pid_path(recset_group.account,
                                                                                  recset_group.market,
@@ -433,6 +432,8 @@ class RecsTestCaseWithData(RecsTestCase):
             unload_result.append((unload_path, sent_time))
             s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
+                mock.patch('monetate_recommendations.precompute_purchase_associated_pids.get_dataset_ids_for_pos') \
+                            as mock_pos_datasets, \
                 mock.patch('contextlib.closing', return_value=self.conn), \
                 mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
                 mock.patch('sqlalchemy.engine.Connection.close'), \
@@ -440,6 +441,7 @@ class RecsTestCaseWithData(RecsTestCase):
                            autospec=True) as mock_suffix, \
                 mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
                            autospec=True) as mock_pid_suffix:
+            mock_pos_datasets.return_value = [1, 2]
             mock_pid_suffix.return_value = unload_pid_path, pid_send_time
             mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
             initialize_collab_algorithm([recset_group], algorithm)
