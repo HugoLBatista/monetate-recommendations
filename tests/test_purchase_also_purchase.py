@@ -44,8 +44,14 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         # online offline account 30 day lookback
         recs8 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 30, 'global_recset': False,
                  'market': False, 'retailer_market_scope': False, 'purchase_data_source': 'online_offline'}
+        # online offline market 2 day lookback
+        recs9 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 2, 'global_recset': False,
+                 'market': True, 'retailer_market_scope': False, 'purchase_data_source': 'online_offline'}
+        # offline retailer_market 2 day lookback
+        recs10 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 2, 'global_recset': False,
+                 'market': False, 'retailer_market_scope': True, 'purchase_data_source': 'offline'}
 
-        recsets_to_create = [recs1, recs2, recs3, recs4, recs5, recs6, recs7, recs8]
+        recsets_to_create = [recs1, recs2, recs3, recs4, recs5, recs6, recs7, recs8, recs9, recs10]
 
         with invalidation_context():
             for recset in recsets_to_create:
@@ -241,11 +247,11 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         expected_results = {}
         for r in recsets:
             expected_results[r.id] = [
-                ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3)]),
-                ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
+                ('TP-00001', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00003', 5)]),
+                ('TP-00004', [('SKU-00002', 1), ('SKU-00001', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00003', 5)]),
                 ('TP-00003', [('SKU-00002', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
-                ('TP-00005', [('SKU-00004', 1)]),
-                ('TP-00002', [('SKU-00003', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+                ('TP-00005', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3)]),
+                ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
             ]
         self._run_collab_recs_test('purchase_also_purchase', 7, recsets, expected_results,
                                    account=self.account, purchase_data_source="online")
@@ -269,14 +275,45 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
         expected_results = {}
         for r in recsets:
             expected_results[r.id] = [
-                ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3)]),
-                ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
+                ('TP-00001', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00003', 5)]),
+                ('TP-00004', [('SKU-00002', 1), ('SKU-00001', 2), ('SKU-00006', 3), ('SKU-00005', 4), ('SKU-00003', 5)]),
                 ('TP-00003', [('SKU-00002', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
-                ('TP-00005', [('SKU-00004', 1)]),
-                ('TP-00002', [('SKU-00003', 1), ('SKU-00004', 2), ('SKU-00001', 3)]),
+                ('TP-00005', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3)]),
+                ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3), ('SKU-00006', 4), ('SKU-00005', 5)]),
             ]
         self._run_collab_recs_test('purchase_also_purchase', 7, recsets, expected_results,
                                    account=self.account, purchase_data_source="offline")
+
+    def test_2_day_purchase_also_purchase_account_level_retailer_market_offline_pos(self):
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='purchase_also_purchase',
+              account=self.account,
+              lookback_days=2,
+              market=None,
+              retailer_market_scope=True,
+              purchase_data_source="offline") |
+            Q(algorithm='purchase_also_purchase',
+              account=None,
+              lookback_days=2,
+              market=None,
+              retailer_market_scope=True,
+              purchase_data_source="offline")
+        )
+
+        recs10_expected_result =[
+            ('TP-00001', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00002', 3)]),
+            ('TP-00004', [('SKU-00003', 1), ('SKU-00002', 2), ('SKU-00001', 3)]),
+            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3)]),
+            ('TP-00002', [('SKU-00004', 1), ('SKU-00003', 2), ('SKU-00001', 3)]),
+        ]
+        expected_results_arr = [recs10_expected_result]
+        expected_results = {}
+        for index, r in enumerate(recsets):
+            expected_results[r.id] = expected_results_arr[index]
+        self._run_collab_recs_test('purchase_also_purchase', 2, recsets,
+                                   expected_results, account=None, market=None, retailer=self.retailer_id,
+                                   purchase_data_source="offline")
+
 
     def test_30_day_purchase_also_purchase_account_level_online_offline_pos(self):
         recsets = recs_models.RecommendationSet.objects.filter(
@@ -305,4 +342,35 @@ class PurchaseAlsoPurchaseTestCase(RecsTestCaseWithData):
             ]
         self._run_collab_recs_test('purchase_also_purchase', 30, recsets, expected_results,
                                    account=self.account, purchase_data_source="online_offline")
+
+    def test_2_day_purchase_also_purchase_account_level_market_online_offline_pos(self):
+        recsets = recs_models.RecommendationSet.objects.filter(
+            Q(algorithm='purchase_also_purchase',
+              account=self.account,
+              lookback_days=2,
+              market=self.market,
+              retailer_market_scope=False,
+              purchase_data_source="online_offline") |
+            Q(algorithm='purchase_also_purchase',
+              account=None,
+              lookback_days=2,
+              market=self.market,
+              retailer_market_scope=False,
+              purchase_data_source="online_offline")
+        )
+
+        recs9_expected_result = [
+            ('TP-00001', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00004', 3), ('SKU-00003', 4), ('SKU-00002', 5)]),
+            ('TP-00004', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00003', 3), ('SKU-00002', 4), ('SKU-00001', 5)]),
+            ('TP-00003', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3)]),
+            ('TP-00005', [('SKU-00004', 1), ('SKU-00002', 2), ('SKU-00001', 3)]),
+            ('TP-00002', [('SKU-00006', 1), ('SKU-00005', 2), ('SKU-00004', 3), ('SKU-00003', 4), ('SKU-00001', 5)]),
+        ]
+        expected_results_arr = [recs9_expected_result]
+
+        expected_results = {}
+        for index, r in enumerate(recsets):
+            expected_results[r.id] = expected_results_arr[index]
+        self._run_collab_recs_test('purchase_also_purchase', 2, recsets,
+                                   expected_results, market=self.market, purchase_data_source="online_offline")
 

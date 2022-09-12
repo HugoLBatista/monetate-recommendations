@@ -244,14 +244,15 @@ class RecsTestCase(SnowflakeTestCase):
     @classmethod
     def _setup_market(cls, setup):
         if setup is True:
-            cls.market = Market.objects.create(
+            cls.market, created = Market.objects.get_or_create(
                 name="Market from test",
                 retailer=cls.account.retailer
             )
-            MarketAccount.objects.create(
-                account=cls.account,
-                market=cls.market
-            )
+            if created:
+                MarketAccount.objects.create(
+                    account=cls.account,
+                    market=cls.market
+                )
             return cls.market
 
     @classmethod
@@ -285,6 +286,7 @@ class RecsTestCaseWithData(RecsTestCase):
         mid2 = factgen.make_monetate_id(cls.account_id)
 
         qty = 8
+        within_2_day = datetime.now() - timedelta(days=1)
         within_7_day = datetime.now() - timedelta(days=5)
         within_30_day = datetime.now() - timedelta(days=29)
 
@@ -349,6 +351,12 @@ class RecsTestCaseWithData(RecsTestCase):
             (mid2, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
             (mid2, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
             (mid2, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid2, within_2_day, 'TP-00001', 'SKU-00005', 'purch_1',),
+            (mid2, within_2_day, 'TP-00004', 'SKU-00001', 'purch_4',),
+            (mid2, within_2_day, 'TP-00005', 'SKU-00002', 'purch_5',),
+            (mid2, within_2_day, 'TP-00001', 'SKU-00005', 'purch_1',),
+            (mid2, within_2_day, 'TP-00002', 'SKU-00002', 'purch_2',),
         ]
         cls.conn.execute(
             """
@@ -383,6 +391,11 @@ class RecsTestCaseWithData(RecsTestCase):
             (cls.retailer_id, 2, customer2, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
             (cls.retailer_id, 2, customer2, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
             (cls.retailer_id, 2, customer2, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_4', 'TP-00004', 'SKU-00001'),
         ]
 
         cls.conn.execute(
