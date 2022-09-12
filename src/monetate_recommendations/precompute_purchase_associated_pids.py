@@ -119,7 +119,6 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
     HAVING count(*) >= :minimum_count
 """
 
-# TODO: Refactor online_offline to call online and offline query
 PAP_QUERY_DISPATCH = {
     "online_offline": ONLINE_OFFLINE_PAP_QUERY,
     "online": ONLINE_PAP_QUERY,
