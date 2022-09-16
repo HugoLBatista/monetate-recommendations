@@ -193,14 +193,15 @@ def process_purchase_collab_algorithm(conn, queue_entry):
            and queue_entry.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) else 1
     # get account ids, dataset ids for pos [(account_id, dataset_id)...]
     account_ids_dataset_ids = get_dataset_ids_for_pos(account_ids)
+    # we only want to run online if the account has no pos datasets
     if not account_ids_dataset_ids and queue_entry.purchase_data_source in ["online_offline", "offline"]:
-        raise ValueError('Account/s {} has/have no offline purchase datasets'.format(account_ids))
+        purchase_data_source = "online"
     run_pap_main_and_helper_queries(account, account_ids, market, retailer, lookback_days, algorithm,
                                     purchase_data_source, begin_fact_time, account_ids_dataset_ids, min_count, conn)
     # normalize score
     conn.execute(text(precompute_utils.PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                  lookback_days=lookback_days, market_id=market, retailer_id=retailer,
-                                                 purchase_data_source=queue_entry.purchase_data_source)))
+                                                 purchase_data_source=purchase_data_source)))
     result_counts = precompute_utils.process_collab_recsets(conn, queue_entry, account, market, retailer)
 
     log.log_info('Completed processing queue entry {}'.format(queue_entry.id))
