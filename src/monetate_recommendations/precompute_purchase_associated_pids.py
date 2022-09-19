@@ -119,7 +119,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
     HAVING count(*) >= :minimum_count
 """
 
-PAP_QUERY_DISPATCH = {
+QUERY_DISPATCH = {
     "purchase_also_purchase": {
         "online_offline": ONLINE_OFFLINE_PAP_QUERY,
         "online": ONLINE_PAP_QUERY,
@@ -145,7 +145,7 @@ def get_dataset_ids_for_pos(account_ids):
     return flattened_aids_dids
 
 
-def run_pap_main_and_helper_queries(account, account_ids, market, retailer, lookback_days, algorithm,
+def run_purchase_queries(account, account_ids, market, retailer, lookback_days, algorithm,
                                     purchase_data_source, begin_fact_time, account_ids_dataset_ids, min_count, conn):
     if purchase_data_source == "online_offline":
         # execute both online and offline helper queries and aggregated final papa query
@@ -155,16 +155,16 @@ def run_pap_main_and_helper_queries(account, account_ids, market, retailer, look
         conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
                                                            retailer_id=retailer, lookback_days=lookback_days)),
                      account_ids=account_ids, begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
-        conn.execute(text(PAP_QUERY_DISPATCH[algorithm][purchase_data_source].
+        conn.execute(text(QUERY_DISPATCH[algorithm][purchase_data_source].
                           format(algorithm=algorithm, account_id=account, market_id=market, retailer_id=retailer,
                                  lookback_days=lookback_days, purchase_data_source=purchase_data_source)),
                      minimum_count=min_count)
     # offline only or online only
     else:
-        conn.execute(text(SOURCE_DATA_DISPATCH[algorithm][purchase_data_source].
+        conn.execute(text(SOURCE_DATA_DISPATCH[purchase_data_source].
                           format(account_id=account, market_id=market, retailer_id=retailer, lookback_days=lookback_days)),
                      begin_fact_time=begin_fact_time, account_ids=account_ids, aids_dids=account_ids_dataset_ids)
-        conn.execute(text(PAP_QUERY_DISPATCH[purchase_data_source].format(algorithm=algorithm, account_id=account,
+        conn.execute(text(QUERY_DISPATCH[algorithm][purchase_data_source].format(algorithm=algorithm, account_id=account,
                      market_id=market, retailer_id=retailer, lookback_days=lookback_days)), minimum_count=min_count)
 
 
@@ -196,7 +196,7 @@ def process_purchase_collab_algorithm(conn, queue_entry):
     # we only want to run online if the account has no pos datasets
     if not account_ids_dataset_ids and queue_entry.purchase_data_source in ["online_offline", "offline"]:
         purchase_data_source = "online"
-    run_pap_main_and_helper_queries(account, account_ids, market, retailer, lookback_days, algorithm,
+    run_purchase_queries(account, account_ids, market, retailer, lookback_days, algorithm,
                                     purchase_data_source, begin_fact_time, account_ids_dataset_ids, min_count, conn)
     # normalize score
     conn.execute(text(precompute_utils.PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,

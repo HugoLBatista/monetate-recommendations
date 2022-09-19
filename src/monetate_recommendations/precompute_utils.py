@@ -605,7 +605,7 @@ def get_recset_ids(recset_group):
             account_id=recset_group.account, recommendation_set_id__algorithm=recset_group.algorithm,
             recommendation_set_id__lookback_days=recset_group.lookback_days, recommendation_set_id__market_id=None,
             recommendation_set_id__retailer_market_scope=None,
-            recommendation_set__purchase_data_source=recset_group.purchase_data_source,
+            recommendation_set_id__purchase_data_source=recset_group.purchase_data_source,
             recommendation_set_id__archived=False)
         retailer_recsets = RecommendationSet.objects.filter(
                 id__in=[retailer_recset_id.recommendation_set_id for retailer_recset_id in retailer_recset_ids]
