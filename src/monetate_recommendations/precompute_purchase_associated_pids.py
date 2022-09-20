@@ -41,12 +41,11 @@ HAVING fact_time >= :begin_fact_time
 
 ONLINE_OFFLINE_PAP_QUERY = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source} AS
-WITH intermediate_query AS (
     SELECT
         account_id,
         pid1,
         pid2,
-        count(*) score
+        sum(score) score
     FROM (
         SELECT
             p1.account_id account_id,
@@ -77,10 +76,6 @@ WITH intermediate_query AS (
         HAVING count(*) >= :minimum_count
     )
     GROUP BY 1, 2, 3
-)
-SELECT account_id, pid1, pid2, sum(score) score
-FROM intermediate_query
-GROUP BY 1, 2, 3
 """
 
 
