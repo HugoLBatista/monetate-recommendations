@@ -34,7 +34,8 @@ JOIN filtered_devices fd
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
 # example  6814_None_None
 VIEW_ALSO_VIEW = """
-CREATE TEMPORARY TABLE scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+CREATE TEMPORARY TABLE scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source}
+AS
 WITH
 half_scores AS (
     /* Filter out pairs existing seen only on one device. */
@@ -101,12 +102,14 @@ def process_view_collab_algorithm(conn, queue_entry):
                  end_fact_time=end_fact_time, lookback=lookback_days)
 
     conn.execute(text(QUERY_DISPATCH[algorithm].format(algorithm=algorithm, account_id=account, market_id=market,
-                                                       retailer_id=retailer, lookback_days=lookback_days)))
+                                                       retailer_id=retailer, lookback_days=lookback_days,
+                                                       purchase_data_source="online")))
 
     # normalize score
     conn.execute(text(precompute_utils.PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                                          lookback_days=lookback_days, market_id=market,
-                                                                         retailer_id=retailer)))
+                                                                         retailer_id=retailer,
+                                                                         purchase_data_source="online")))
 
     result_counts = precompute_utils.process_collab_recsets(conn, queue_entry, account, market, retailer)
 

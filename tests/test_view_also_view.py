@@ -18,23 +18,24 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
         # initializing view_also_view recsets
         # account level 30 day lookback
         recs1 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 30, 'global_recset': False,
-                 'market': False, 'retailer_market_scope': False}
+                 'market': False, 'retailer_market_scope': False, 'purchase_data_source': 'online'}
         # global level 30 day lookback
         recs2 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 30, 'global_recset': True,
-                 'market': False, 'retailer_market_scope': False}
+                 'market': False, 'retailer_market_scope': False, 'purchase_data_source': 'online'}
         # filters with 30 day lookback
         recs3 = {'filter_json': json.dumps({"type":"and","filters":[
             {"type":"startswith","left":{"type":"field","field":"id"},"right":{"type":"value","value": ["SKU-00001"]}}
-        ]}), 'lookback': 30, 'global_recset': False, 'market': False, 'retailer_market_scope': False}
+        ]}), 'lookback': 30, 'global_recset': False, 'market': False, 'retailer_market_scope': False,
+                 'purchase_data_source': 'online'}
         # account level 7 day lookback
         recs4 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 7, 'global_recset': False,
-                 'market': False, 'retailer_market_scope': False}
+                 'market': False, 'retailer_market_scope': False, 'purchase_data_source': 'online'}
         # market 30 day lookback
         recs5 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 30, 'global_recset': False,
-                 'market': True, 'retailer_market_scope': False}
+                 'market': True, 'retailer_market_scope': False, 'purchase_data_source': 'online'}
         # retailer_market 30 day lookback
         recs6 = {'filter_json': json.dumps({"type": "and", "filters": []}), 'lookback': 30, 'global_recset': False,
-                 'market': False, 'retailer_market_scope': True}
+                 'market': False, 'retailer_market_scope': True, 'purchase_data_source': 'online'}
 
         recsets_to_create = [recs1, recs2, recs3, recs4, recs5, recs6]
 
@@ -55,6 +56,7 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                     product_catalog=dio_models.Schema.objects.get(id=cls.product_catalog_id),
                     retailer_market_scope=cls._setup_retailer_market(recset['retailer_market_scope'], recset['market']),
                     market=cls._setup_market(recset['market']),
+                    purchase_data_source=recset['purchase_data_source']
                 )
                 # for global recset which is not market we need to create a row in recommendation_set_dataset table
                 if rec.is_retailer_tenanted and not rec.is_market_or_retailer_driven_ds:
@@ -73,6 +75,7 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
                     retailer=rec.retailer if rec.retailer_market_scope else None,
                     algorithm=rec.algorithm,
                     lookback_days=rec.lookback_days,
+                    purchase_data_source="online"
                 )
 
     def test_30_day_view_also_view_account_level(self):
@@ -81,12 +84,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         # commenting out as we are currently not using pid_pid output
@@ -130,12 +135,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=False) |
+              retailer_market_scope=False,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
               market=self.market,
-              retailer_market_scope=False)
+              retailer_market_scope=False,
+              purchase_data_source="online")
         )
         # commenting out as we are currently not using pid_pid output
         # pid_pid_expected_results = [
@@ -174,12 +181,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=30,
               market=None,
-              retailer_market_scope=True) |
+              retailer_market_scope=True,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=30,
               market=None,
-              retailer_market_scope=True)
+              retailer_market_scope=True,
+              purchase_data_source="online")
         )
         # commenting out as we are currently not using pid_pid output
         # pid_pid_expected_results = [
@@ -217,12 +226,14 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
               account=self.account,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None) |
+              retailer_market_scope=None,
+              purchase_data_source="online") |
             Q(algorithm='view_also_view',
               account=None,
               lookback_days=7,
               market=None,
-              retailer_market_scope=None)
+              retailer_market_scope=None,
+              purchase_data_source="online")
         )
 
         # commenting out as we are currently not using pid_pid output

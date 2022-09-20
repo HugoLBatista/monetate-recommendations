@@ -72,6 +72,7 @@ class RecsTestCase(SnowflakeTestCase):
         'm_dedup_purchase_line',
         'm_session_first_geo',
         'product_catalog',
+        'dio_purchase'
     ]
 
     @classmethod
@@ -164,7 +165,9 @@ class RecsTestCase(SnowflakeTestCase):
             VALUES
                 (%s, %s, %s, %s)
             """,
-            (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30))
+            (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30)),
+            # for pos join
+            (21, 2, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30))
         )
 
     @patch_invalidations
@@ -241,14 +244,15 @@ class RecsTestCase(SnowflakeTestCase):
     @classmethod
     def _setup_market(cls, setup):
         if setup is True:
-            cls.market = Market.objects.create(
+            cls.market, created = Market.objects.get_or_create(
                 name="Market from test",
                 retailer=cls.account.retailer
             )
-            MarketAccount.objects.create(
-                account=cls.account,
-                market=cls.market
-            )
+            if created:
+                MarketAccount.objects.create(
+                    account=cls.account,
+                    market=cls.market
+                )
             return cls.market
 
     @classmethod
@@ -282,8 +286,14 @@ class RecsTestCaseWithData(RecsTestCase):
         mid2 = factgen.make_monetate_id(cls.account_id)
 
         qty = 8
+        within_2_day = datetime.now() - timedelta(days=1)
         within_7_day = datetime.now() - timedelta(days=5)
         within_30_day = datetime.now() - timedelta(days=29)
+
+        # offline customers
+        customer0 = "customer0"
+        customer1 = "customer1"
+        customer2 = "customer2"
 
         v = [
             (mid0, within_7_day, 'TP-00003'),
@@ -341,6 +351,12 @@ class RecsTestCaseWithData(RecsTestCase):
             (mid2, within_30_day, 'TP-00002', 'SKU-00002', 'purch_2', ),
             (mid2, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
             (mid2, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
+
+            (mid2, within_2_day, 'TP-00001', 'SKU-00005', 'purch_1',),
+            (mid2, within_2_day, 'TP-00004', 'SKU-00001', 'purch_4',),
+            (mid2, within_2_day, 'TP-00005', 'SKU-00002', 'purch_5',),
+            (mid2, within_2_day, 'TP-00001', 'SKU-00005', 'purch_1',),
+            (mid2, within_2_day, 'TP-00002', 'SKU-00002', 'purch_2',),
         ]
         cls.conn.execute(
             """
@@ -351,10 +367,51 @@ class RecsTestCaseWithData(RecsTestCase):
             """, *[(e[0][0], e[1], e[0][1], e[0][3], e[0][2], e[4], 1, e[2], e[3], 1, 'USD', 3.0, 3.0, 3.0) for e in p]
         )
 
+        offline_purchases = [
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer0, within_7_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer0, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, 2, customer1, within_7_day, 'purch_2', 'TP-00002', 'SKU-00005'),
+            (cls.retailer_id, 2, customer1, within_7_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer1, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, 2, customer2, within_7_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+            (cls.retailer_id, 2, customer2, within_7_day, 'purch_5', 'TP-00005', 'SKU-00002'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer2, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer2, within_2_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+        ]
+
+        cls.conn.execute(
+            """
+            INSERT INTO dio_purchase
+            (retailer_id, dataset_id, customer_id, time, purchase_id, line, product_id, sku, currency,
+            currency_unit_price, quantity, store_id, update_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [(e[0], e[1], e[2], e[3], e[4], 1, e[5], e[6], 'USD', 3.0, 1, 2, e[3]) for e in offline_purchases]
+        )
+
     @patch_invalidations
     def _run_collab_recs_test(self, algorithm, lookback, recsets, expected_results,
                               account=None, market=None, retailer=None,
-                              similar_product_weights_json=None):
+                              similar_product_weights_json=None, purchase_data_source="online"):
 
         recset_group = recs_models.PrecomputeQueue.objects.get(
                 account=account,
@@ -362,6 +419,7 @@ class RecsTestCaseWithData(RecsTestCase):
                 retailer=retailer,
                 algorithm=algorithm,
                 lookback_days=lookback,
+                purchase_data_source=purchase_data_source
             )
 
         # Insert row into config to mock out the similar_product_weights_json setting
@@ -387,6 +445,8 @@ class RecsTestCaseWithData(RecsTestCase):
             unload_result.append((unload_path, sent_time))
             s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
+                mock.patch('monetate_recommendations.precompute_purchase_associated_pids.get_dataset_ids_for_pos') \
+                            as mock_pos_datasets, \
                 mock.patch('contextlib.closing', return_value=self.conn), \
                 mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
                 mock.patch('sqlalchemy.engine.Connection.close'), \
@@ -394,6 +454,7 @@ class RecsTestCaseWithData(RecsTestCase):
                            autospec=True) as mock_suffix, \
                 mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
                            autospec=True) as mock_pid_suffix:
+            mock_pos_datasets.return_value = [1, 2]
             mock_pid_suffix.return_value = unload_pid_path, pid_send_time
             mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
             initialize_collab_algorithm([recset_group], algorithm)

@@ -18,7 +18,8 @@ WHERE retailer_id=:retailer_id AND dataset_id=:dataset_id AND lower(availability
 
 
 SIMILAR_PRODUCTS_V2 = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source}
+AS
 WITH truth_table as (SELECT pc1.item_group_id as pid1, pc2.item_group_id as pid2,
                       {weights}
                      FROM scratch.retailer_product_catalog_{account_id}_{market_id}_{retailer_id}_{lookback_days} pc1
@@ -75,12 +76,14 @@ def process_catalog_collab_algorithm(conn, queue_entry):
     weights_sql, selected_attributes = get_similar_products_weights(account, market, retailer, lookback_days)
     conn.execute(text(QUERY_DISPATCH[algorithm].format(algorithm=algorithm, account_id=account, market_id=market,
                                                        retailer_id=retailer, lookback_days=lookback_days,
-                                                       weights=weights_sql, selected_attributes=selected_attributes)))
+                                                       weights=weights_sql, selected_attributes=selected_attributes,
+                                                       purchase_data_source="online")))
 
     # normalize score
     conn.execute(text(precompute_utils.PID_RANKS_BY_COLLAB_RECSET.format(algorithm=algorithm, account_id=account,
                                                                          lookback_days=lookback_days, market_id=market,
-                                                                         retailer_id=retailer)))
+                                                                         retailer_id=retailer,
+                                                                         purchase_data_source="online")))
 
     result_counts = precompute_utils.process_collab_recsets(conn, queue_entry, account, market, retailer)
 
