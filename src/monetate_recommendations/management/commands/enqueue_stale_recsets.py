@@ -1,5 +1,6 @@
 import datetime
 from django.core.management.base import BaseCommand
+from django.core.exceptions import MultipleObjectsReturned
 from django.db.models import Q
 from django.utils import timezone
 from monetate.common import log
@@ -26,21 +27,27 @@ class Command(BaseCommand):
         return account
 
     def enqueue_precompute_collab(self, recset, account=None):
-        _, created = recs_models.PrecomputeQueue.objects.get_or_create(
-            account=self.get_account(recset, account),
-            market=recset.market,
-            retailer=recset.retailer if recset.retailer_market_scope else None,
-            algorithm=recset.algorithm,
-            lookback_days=recset.lookback_days,
-            defaults={
-                'status': precompute_constants.STATUS_PENDING,
-                'process_complete': False,
-                'products_returned': 0,
-                'attempts': 0,
-                'precompute_enqueue_time': timezone.now()
-            }
-        )
-        return created
+        try:
+            _, created = recs_models.PrecomputeQueue.objects.get_or_create(
+                account=self.get_account(recset, account),
+                market=recset.market,
+                retailer=recset.retailer if recset.retailer_market_scope else None,
+                algorithm=recset.algorithm,
+                lookback_days=recset.lookback_days,
+                purchase_data_source=recset.purchase_data_source,
+                defaults={
+                    'status': precompute_constants.STATUS_PENDING,
+                    'process_complete': False,
+                    'products_returned': 0,
+                    'attempts': 0,
+                    'precompute_enqueue_time': timezone.now()
+                }
+            )
+
+            return created
+
+        except MultipleObjectsReturned:
+            log.log_exception('Multiple objects returned for recset {}'.format(recset.id))
 
     def handle(self, *args, **options):
         hours = options.get('hours', 24)
