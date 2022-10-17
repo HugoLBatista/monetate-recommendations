@@ -27,6 +27,11 @@ class PurchaseValueTestCase(RecsTestCase):
         within_7_day = datetime.now() - timedelta(days=6)
         within_30_day = datetime.now() - timedelta(days=29)
         outside_30_day = datetime.now() - timedelta(days=40)
+
+        customer0 = "customer0"
+        customer1 = "customer1"
+        customer2 = "customer2"
+
         cls.conn.execute(
             """
             INSERT INTO m_session_first_geo
@@ -106,6 +111,42 @@ class PurchaseValueTestCase(RecsTestCase):
              2, 'TP-00004', 'SKU-00004', 50, 'USD', 4.0, 4.0, 4.0),
         )
 
+        # offline_data
+        offline_purchases = [
+            (cls.retailer_id, customer0, within_7_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, customer0, within_7_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, customer0, within_7_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, customer0, within_7_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, customer0, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, customer0, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, customer0, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, customer0, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, customer1, within_7_day, 'purch_2', 'TP-00002', 'SKU-00005'),
+            (cls.retailer_id, customer1, within_7_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, customer1, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, customer1, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, customer1, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, customer1, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+
+            (cls.retailer_id, customer2, within_7_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+            (cls.retailer_id, customer2, within_7_day, 'purch_5', 'TP-00005', 'SKU-00002'),
+            (cls.retailer_id, customer2, within_30_day, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, customer2, within_30_day, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, customer2, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, customer2, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+        ]
+        cls.conn.execute(
+            """
+                INSERT INTO dio_purchase
+                (retailer_id, dataset_id, customer_id, time, purchase_id, line, product_id, sku, currency,
+                currency_unit_price, quantity, store_id, update_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [(e[0], cls.account_id, e[1], e[2], e[3], 1, e[4], e[5], 'USD', 3.0, 1, 2, e[2]) for e in offline_purchases]
+        )
+
     def test_purchase_value_no_geo_7_days(self):
         # 7-day totals:
         # PRODUCT   Purchases in US/PA  Purchases in US/NJ  Purchases in CA/ON
@@ -122,7 +163,29 @@ class PurchaseValueTestCase(RecsTestCase):
             ('SKU-00005', 2),
             ('SKU-00006', 3),
             ('SKU-00003', 4),
-        ])
+        ], purchase_data_source="online")
+
+    def test_purchase_value_no_geo_7_days_offline_pos(self):
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
+            ('SKU-00002', 1),
+            ('SKU-00003', 2),
+            ('SKU-00004', 3),
+            ('SKU-00001', 4),
+            ('SKU-00005', 5),
+            ('SKU-00006', 6),
+        ], purchase_data_source="offline")
+
+    def test_purchase_value_no_geo_7_days_online_offline(self):
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
+            ('SKU-00002', 1),
+            ('SKU-00003', 2),
+            ('SKU-00004', 3),
+            ('SKU-00001', 4),
+            ('SKU-00005', 5),
+            ('SKU-00006', 6),
+        ], purchase_data_source="online_offline")
 
     def test_purchase_value_no_geo_30_days(self):
         # 30-day totals:
@@ -143,7 +206,29 @@ class PurchaseValueTestCase(RecsTestCase):
             ('SKU-00002', 3),
             ('SKU-00003', 4),
             ('SKU-00004', 5),
-        ])
+        ], purchase_data_source="online")
+
+    def test_purchase_value_no_geo_30_days_offline_pos(self):
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(algorithm="purchase_value", lookback=30, filter_json=filter_json, expected_result=[
+            ('SKU-00004', 1),
+            ('SKU-00002', 2),
+            ('SKU-00003', 3),
+            ('SKU-00001', 4),
+            ('SKU-00005', 5),
+            ('SKU-00006', 6),
+        ], purchase_data_source="offline")
+
+    def test_purchase_value_no_geo_30_days_online_offline(self):
+        filter_json = json.dumps({"type": "and", "filters": []})
+        self._run_recs_test(algorithm="purchase_value", lookback=30, filter_json=filter_json, expected_result=[
+            ('SKU-00002', 1),
+            ('SKU-00003', 2),
+            ('SKU-00004', 3),
+            ('SKU-00001', 4),
+            ('SKU-00005', 5),
+            ('SKU-00006', 6),
+        ], purchase_data_source="online_offline")
 
     def test_purchase_value_filter(self):
         # 7-day totals:
@@ -172,7 +257,7 @@ class PurchaseValueTestCase(RecsTestCase):
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
-        ])
+        ], purchase_data_source="online")
 
     def test_purchase_value_filter_multi(self):
         # 7-day totals:
@@ -203,7 +288,7 @@ class PurchaseValueTestCase(RecsTestCase):
             ('SKU-00005', 2),
             ('SKU-00006', 3),
             ('SKU-00003', 4),
-        ])
+        ], purchase_data_source="online")
 
     def test_purchase_value_with_region_geo_dynamic_filter(self):
         # 7-day totals:
@@ -278,7 +363,7 @@ class PurchaseValueTestCase(RecsTestCase):
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans/country_code=US/region=PA'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Pants/country_code=US/region=PA'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=test/country_code=US/region=PA'.lower())).hexdigest(),
-        ])
+        ], purchase_data_source="online")
 
     def test_purchase_retailer_scope(self):
         # 7-day totals:
@@ -301,7 +386,7 @@ class PurchaseValueTestCase(RecsTestCase):
                 ('SKU-00006', 3),
                 ('SKU-00003', 4),
             ],
-            retailer_market_scope=True,
+            retailer_market_scope=True, purchase_data_source="online"
         )
 
     def test_purchase_market_scope(self):
@@ -325,7 +410,7 @@ class PurchaseValueTestCase(RecsTestCase):
                 ('SKU-00006', 3),
                 ('SKU-00003', 4),
             ],
-            market=True,
+            market=True, purchase_data_source = "online"
         )
 
     def test_sku_filter(self):
@@ -385,5 +470,5 @@ class PurchaseValueTestCase(RecsTestCase):
                 ('SKU-00005', 2),
                 ('SKU-00006', 3),
             ],
-            market=True,
+            market=True, purchase_data_source="online"
         )

@@ -153,7 +153,7 @@ class MostViewedTestCase(RecsTestCase):
             ('SKU-00005', 2),
             ('SKU-00006', 3),
             ('SKU-00003', 4),
-        ])
+        ], purchase_data_source="online")
 
     def test_view_by_no_geo_30_days(self):
         # 30-day totals:
@@ -174,7 +174,7 @@ class MostViewedTestCase(RecsTestCase):
             ('SKU-00005', 3),
             ('SKU-00006', 4),
             ('SKU-00004', 5),
-        ])
+        ], purchase_data_source="online")
 
     def test_view_filter(self):
         # 7-day totals:
@@ -203,7 +203,7 @@ class MostViewedTestCase(RecsTestCase):
         self._run_recs_test(algorithm="view", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
             ('SKU-00006', 2),
-        ])
+        ], purchase_data_source="online")
 
     def test_view_filter_multi(self):
         # 7-day totals:
@@ -234,7 +234,7 @@ class MostViewedTestCase(RecsTestCase):
             ('SKU-00005', 2),
             ('SKU-00006', 3),
             ('SKU-00003', 4),
-        ])
+        ], purchase_data_source="online")
 
     def test_view_filter_dynamic(self):
         # 30-day totals:
@@ -282,7 +282,7 @@ class MostViewedTestCase(RecsTestCase):
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Pants'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=test'.lower())).hexdigest(),
-        ])
+        ], purchase_data_source="online")
 
     def test_view_retailer_scope(self):
         # 7-day totals:
@@ -305,7 +305,7 @@ class MostViewedTestCase(RecsTestCase):
                 ('SKU-00006', 3),
                 ('SKU-00003', 4),
             ],
-            retailer_market_scope=True,
+            retailer_market_scope=True, purchase_data_source="online"
         )
 
     def test_view_market_scope(self):
@@ -329,7 +329,7 @@ class MostViewedTestCase(RecsTestCase):
                 ('SKU-00006', 3),
                 ('SKU-00003', 4),
             ],
-            market=True,
+            market=True, purchase_data_source="online"
         )
 
     def test_sku_filter(self):
@@ -389,5 +389,5 @@ class MostViewedTestCase(RecsTestCase):
                 ('SKU-00005', 2),
                 ('SKU-00006', 3),
             ],
-            market=True,
+            market=True, purchase_data_source="online"
         )
