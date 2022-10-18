@@ -181,10 +181,10 @@ class PurchaseValueTestCase(RecsTestCase):
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00002', 1),
             ('SKU-00003', 2),
-            ('SKU-00004', 3),
-            ('SKU-00001', 4),
-            ('SKU-00005', 5),
-            ('SKU-00006', 6),
+            ('SKU-00005', 3),
+            ('SKU-00006', 4),
+            ('SKU-00004', 5),
+            ('SKU-00001', 6),
         ], purchase_data_source="online_offline")
 
     def test_purchase_value_no_geo_30_days(self):
@@ -211,10 +211,10 @@ class PurchaseValueTestCase(RecsTestCase):
     def test_purchase_value_no_geo_30_days_offline_pos(self):
         filter_json = json.dumps({"type": "and", "filters": []})
         self._run_recs_test(algorithm="purchase_value", lookback=30, filter_json=filter_json, expected_result=[
-            ('SKU-00004', 1),
+            ('SKU-00001', 1),
             ('SKU-00002', 2),
             ('SKU-00003', 3),
-            ('SKU-00001', 4),
+            ('SKU-00004', 4),
             ('SKU-00005', 5),
             ('SKU-00006', 6),
         ], purchase_data_source="offline")
@@ -223,11 +223,11 @@ class PurchaseValueTestCase(RecsTestCase):
         filter_json = json.dumps({"type": "and", "filters": []})
         self._run_recs_test(algorithm="purchase_value", lookback=30, filter_json=filter_json, expected_result=[
             ('SKU-00002', 1),
-            ('SKU-00003', 2),
-            ('SKU-00004', 3),
-            ('SKU-00001', 4),
-            ('SKU-00005', 5),
-            ('SKU-00006', 6),
+            ('SKU-00005', 2),
+            ('SKU-00006', 3),
+            ('SKU-00003', 4),
+            ('SKU-00004', 5),
+            ('SKU-00001', 6),
         ], purchase_data_source="online_offline")
 
     def test_purchase_value_filter(self):

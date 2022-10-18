@@ -72,14 +72,12 @@ SELECT
     '' as country_code,
     '' as region,
     p1.product_id,
-    SUM(p2.quantity) as subtotal
+    SUM(p1.quantity) as subtotal
 FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
-JOIN dio_purchase p2
-    ON p1.customer_id = p2.customer_id
-    AND p1.fact_time >= :begin_30_day_session_time
-    AND p1.fact_time < :end_30_day_session_time
 WHERE
     p1.account_id = :account_id
+    AND p1.fact_time >= :begin_30_day_session_time
+    AND p1.fact_time < :end_30_day_session_time
 GROUP BY 1, 2, 3, 4),
 purchase_line_7 as (
 SELECT
@@ -87,14 +85,12 @@ SELECT
     '' as country_code,
     '' as region,
     p1.product_id,
-    SUM(p2.quantity) as subtotal
+    SUM(p1.quantity) as subtotal
 FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
-JOIN dio_purchase p2
-    ON p1.customer_id = p2.customer_id
-    AND p1.fact_time >= :begin_7_day_session_time
-    AND p1.fact_time < :end_7_day_session_time
 WHERE 
     p1.account_id = :account_id
+    AND p1.fact_time >= :begin_7_day_session_time
+    AND p1.fact_time < :end_7_day_session_time
 GROUP BY 1, 2, 3, 4)
 SELECT pl30.account_id,
     pl30.country_code,
@@ -120,18 +116,16 @@ ONLINE_OFFLINE_TRENDING = """
             product_id,
             country_code,
             region,
-            sum(subtotal) as subtotal
+            subtotal
         FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_online
-        GROUP BY 1, 2, 3, 4
         UNION ALL
         SELECT
             account_id,
             product_id,
             country_code,
             region,
-            sum(subtotal) as subtotal
+            subtotal
         FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_offline
-        GROUP BY 1, 2, 3, 4
     )
     GROUP BY 1, 2, 3, 4
 """

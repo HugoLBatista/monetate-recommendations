@@ -38,10 +38,8 @@ OFFLINE_PURCHASE_QUERY = """
         '' as country_code,
         '' as region,
         p1.product_id,
-        SUM(p2.quantity) as subtotal
+        SUM(p1.quantity) as subtotal
     FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
-    JOIN dio_purchase p2
-        ON p1.customer_id = p2.customer_id
     WHERE
         p1.fact_time >= :begin_fact_time
         AND p1.fact_time < :end_fact_time
@@ -64,18 +62,16 @@ ONLINE_OFFLINE_PURCHASE_QUERY = """
             product_id,
             country_code,
             region,
-            sum(subtotal) as subtotal
+            subtotal
         FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_online
-        GROUP BY 1, 2, 3, 4
         UNION ALL
         SELECT
             account_id,
             product_id,
             country_code,
             region,
-            sum(subtotal) as subtotal
+            subtotal
         FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_offline
-        GROUP BY 1, 2, 3, 4
     )
     GROUP BY 1, 2, 3, 4
 """

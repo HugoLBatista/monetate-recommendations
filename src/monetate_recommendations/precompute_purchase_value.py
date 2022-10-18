@@ -57,17 +57,15 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback_
         p1.account_id,
         '' as country_code,
         '' as region,
-        p2.product_id,
-        SUM(p2.quantity * p2.currency_unit_price * ex.rate) as subtotal
+        p1.product_id,
+        SUM(p1.quantity * p1.currency_unit_price * ex.rate) as subtotal
     FROM 
         scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
-    JOIN dio_purchase p2
-        ON p1.customer_id = p2.customer_id
     JOIN config_account ca
         ON ca.account_id = p1.account_id
     JOIN exchange_rate ex
         ON ex.effective_date::date = p1.fact_time::date
-        AND ex.from_currency_code = p2.currency
+        AND ex.from_currency_code = p1.currency
         AND ex.to_currency_code = ca.currency
     WHERE
         p1.fact_time >= :begin_fact_time
@@ -90,18 +88,16 @@ FROM (
         product_id,
         country_code,
         region,
-        sum(subtotal) as subtotal
+        subtotal
     FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_online
-    GROUP BY 1, 2, 3, 4
     UNION ALL
     SELECT
         account_id,
         product_id,
         '' as country_code,
         '' as region,
-        sum(subtotal) as subtotal
+        subtotal
     FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_offline
-    GROUP BY 1, 2, 3, 4
 )
 GROUP BY 1, 2, 3, 4
 """
