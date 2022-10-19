@@ -28,6 +28,8 @@ from tests import patch_invalidations
 
 testcases.snowflake_schema_path = os.path.join(os.path.abspath(os.path.join(os.getcwd(), '..', '..')), 'ec2-user',
                                                'monetate-server', 'snowflake', 'tables', 'public')
+testcases.snowflake_functions_schema_path = os.path.join(os.path.abspath(os.path.join(os.getcwd(), '..', '..')), 'ec2-user',
+                                               'monetate-server', 'snowflake', 'functions')
 catalog_fields = [{'name': 'id', 'data_type': 'STRING'},
                   {'name': 'title', 'data_type': 'STRING'},
                   {'name': 'description', 'data_type': 'STRING'},
