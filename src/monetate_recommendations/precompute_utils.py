@@ -19,6 +19,8 @@ from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES
 from .supported_prefilter_expression import FILTER_MAP
+from monetate_recommendations import precompute_purchase_associated_pids
+from .precompute_purchase_associated_pids import get_dataset_ids_for_pos, GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -148,7 +150,7 @@ pid_algo_raw AS (
         product_id,
         SUM(subtotal) AS score
         {geo_columns}
-    FROM scratch.{algorithm}_{metric_table_account_id}_{lookback}_{market_id}_{retailer_scope}
+    FROM scratch.{algorithm}_{metric_table_account_id}_{lookback}_{market_id}_{retailer_scope}_{purchase_data_source}
     GROUP BY product_id
     {geo_columns}
 ),
@@ -422,18 +424,11 @@ def get_fact_time(lookback):
     return begin_fact_time, end_fact_time
 
 
-def create_metric_table(conn, account_ids, lookback, algorithm, query):
-    begin_fact_time, end_fact_time = get_fact_time(lookback)
-    begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
-        begin_fact_time, end_fact_time)
+def create_metric_table(conn, account_ids, algorithm, query, begin_fact_time, end_fact_time,
+                        begin_session_time, end_session_time, begin_30_day_fact_time, end_30_day_fact_time,
+                        begin_30_day_session_time, end_30_day_session_time):
 
     if algorithm == 'trending':
-
-        begin_30_day_fact_time, end_30_day_fact_time = get_fact_time(30)
-
-        begin_30_day_session_time, end_30_day_session_time = sqlalchemy_warehouse.get_session_time_bounds(
-            begin_30_day_fact_time, end_30_day_fact_time
-        )
         conn.execute(query, account_ids=account_ids, begin_7_day_fact_time=begin_fact_time,
                      end_7_day_fact_time=end_fact_time, begin_7_day_session_time=begin_session_time,
                      end_7_day_session_time=end_session_time, begin_30_day_fact_time=begin_30_day_fact_time,
@@ -637,7 +632,7 @@ def get_recset_ids(recset_group):
     return []
 
 
-def process_noncollab_algorithm(conn, recset, metric_table_query):
+def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=None, online_offline_query=None):
     """
     Example JSON shape unloaded to s3:
     {
@@ -677,20 +672,69 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
             log.log_info("Skipping account id {}, no catalog set".format(account_id))
             continue
         early_filter_exp, late_filter_exp, has_dynamic_filter = parse_non_collab_filters(recset.filter_json,
-                                                                                        catalog_fields)
+                                                                                         catalog_fields)
         global_early_filter_exp, global_late_filter_exp, global_has_dynamic_filter = \
             parse_non_collab_filters(global_filter_json, catalog_fields)
         has_dynamic_filter = has_dynamic_filter or global_has_dynamic_filter
         early_filter_sql, late_filter_sql, filter_variables = supported_prefilter_expression.get_query_and_variables(
             early_filter_exp, late_filter_exp, global_early_filter_exp, global_late_filter_exp, catalog_fields)
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
-        create_metric_table(conn, account_ids, recset.lookback_days, recset.algorithm,
-                            text(metric_table_query.format(algorithm=recset.algorithm,
-                                                           account_id=None if recset.is_market_or_retailer_driven_ds else account_id,
-                                                           lookback=recset.lookback_days,
-                                                           market_id=recset.market.id if recset.market else None,
-                                                           retailer_scope=recset.retailer_market_scope,
-                                                           )))
+        account = None if recset.is_market_or_retailer_driven_ds else account_id
+        market = recset.market.id if recset.market else None
+        retailer = recset.retailer.id if recset.retailer else None
+        begin_fact_time, end_fact_time = get_fact_time(recset.lookback_days)
+        begin_session_time, end_session_time = sqlalchemy_warehouse.get_session_time_bounds(
+            begin_fact_time, end_fact_time)
+
+        begin_30_day_fact_time, end_30_day_fact_time = get_fact_time(30)
+        begin_30_day_session_time, end_30_day_session_time = None, None
+        if recset.algorithm == "trending":
+            begin_30_day_session_time, end_30_day_session_time = sqlalchemy_warehouse.get_session_time_bounds(
+                begin_30_day_fact_time, end_30_day_fact_time
+            )
+        account_ids_dataset_ids = precompute_purchase_associated_pids.get_dataset_ids_for_pos(account_ids)
+        create_helper_query_for_non_collab_algorithm(recset, account, market, retailer,
+                                                     begin_fact_time, account_ids_dataset_ids, conn)
+
+        if recset.purchase_data_source in ["online", "online_offline"]:
+            # online_query
+            create_metric_table(conn, account_ids, recset.algorithm,
+                                text(metric_table_query.format(algorithm=recset.algorithm, account_id=account,
+                                                               lookback=recset.lookback_days,
+                                                               market_id=market,
+                                                               retailer_scope=recset.retailer_market_scope)),
+                                begin_fact_time, end_fact_time, begin_session_time, end_session_time,
+                                begin_30_day_fact_time, end_30_day_fact_time,
+                                begin_30_day_session_time, end_30_day_session_time)
+
+        if recset.purchase_data_source == "online_offline":
+            if recset.algorithm in ["purchase", "trending", "purchase_value"]:
+                # offline_query
+                conn.execute(text(
+                    offline_query.format(
+                        algorithm=recset.algorithm, account_id=account, market_id=market, retailer_id=retailer,
+                        retailer_scope=recset.retailer_market_scope, lookback_days=recset.lookback_days)),
+                    begin_fact_time=begin_fact_time, end_fact_time=end_fact_time, account_id=account,
+                    begin_7_day_session_time=begin_session_time, end_7_day_session_time=end_session_time,
+                    begin_30_day_session_time=begin_30_day_session_time, end_30_day_session_time=end_30_day_session_time)
+                # online_offline (union all + sum query)
+                conn.execute(text(
+                    online_offline_query.format(
+                        algorithm=recset.algorithm, account_id=account, market_id=market,  retailer_id=retailer,
+                        retailer_scope=recset.retailer_market_scope, lookback_days=recset.lookback_days,
+                        purchase_data_source=recset.purchase_data_source)))
+
+        if recset.purchase_data_source == "offline":
+            if recset.algorithm in ["purchase", "trending", "purchase_value"]:
+                # offline_query
+                conn.execute(text(
+                    offline_query.format(
+                        algorithm=recset.algorithm, account_id=account, market_id=market, retailer_id=retailer,
+                        retailer_scope=recset.retailer_market_scope, lookback_days=recset.lookback_days)),
+                    begin_fact_time=begin_fact_time, end_fact_time=end_fact_time, account_id=account,
+                    begin_7_day_session_time=begin_session_time, end_7_day_session_time=end_session_time,
+                    begin_30_day_session_time=begin_30_day_session_time, end_30_day_session_time=end_30_day_session_time)
+
         unload_path, send_time = create_unload_target_path(account_id, recset.id)
         unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
 
@@ -703,6 +747,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                                                      late_filter=late_filter_sql,
                                                      market_id=recset.market.id if recset.market else None,
                                                      retailer_scope=recset.retailer_market_scope,
+                                                     purchase_data_source=recset.purchase_data_source,
                                                      **unload_sql)),
                      retailer_id=recset.retailer.id,
                      catalog_id=catalog_id,
@@ -718,6 +763,18 @@ def process_noncollab_algorithm(conn, recset, metric_table_query):
                      target=unload_path)
     return result_counts
 
+def create_helper_query_for_non_collab_algorithm(recset, account, market, retailer,
+                                                 begin_fact_time, account_ids_dataset_ids, conn):
+    if recset.algorithm in ["purchase", "trending", "purchase_value"]:
+        # GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID is required in case of both online_offline and offline
+        lookback_days = recset.lookback_days
+        if not account_ids_dataset_ids and recset.purchase_data_source in ["online_offline", "offline"]:
+            raise ValueError('Account/s {} has/have no offline purchase datasets'.format(account))
+        conn.execute(text(
+            precompute_purchase_associated_pids.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(
+                account_id=account, market_id=market,
+                retailer_id=retailer, lookback_days=lookback_days)), begin_fact_time=begin_fact_time,
+            aids_dids=account_ids_dataset_ids)
 
 def get_account_ids_for_catalog_join_and_output(recset, queue_account):
     """

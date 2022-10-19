@@ -33,7 +33,7 @@ setup(
         "django-json-rpc",
         "djangorestframework<=3.9.0",  # last version which supports both py2 and py3
         "monetate-bandit",
-        "monetate-recs<=1.3.4",
+        "monetate-recs<=1.3.5",
         "aws-encryption-sdk",
         "beautifulsoup4<=4.9.3",  # The final version of Beautiful Soup to support Python 2 was 4.9.3
         "cachetools<=3.1.1",  # last version which supports both py2 and py3

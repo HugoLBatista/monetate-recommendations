@@ -5,11 +5,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from monetate.common import job_timing, log
 from monetate_recommendations import precompute_utils
-
 log.configure_script_log('precompute_purchase_algorithm')
 
-BESTSELLERS_LOOKBACK = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope} AS
+ONLINE_PURCHASE_QUERY = """ 
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}_online AS
 /* Merchandiser: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 SELECT
     s.account_id,
@@ -32,6 +31,50 @@ WHERE s.start_time >= :begin_session_time
 GROUP BY 1, 2, 3, 4;
 """
 
+OFFLINE_PURCHASE_QUERY = """
+    CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_offline AS
+    SELECT
+        p1.account_id as account_id,
+        '' as country_code,
+        '' as region,
+        p1.product_id,
+        SUM(p1.quantity) as subtotal
+    FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+    WHERE
+        p1.fact_time >= :begin_fact_time
+        AND p1.fact_time < :end_fact_time
+        AND p1.product_id is NOT NULL
+    GROUP BY 1, 2, 3, 4
+"""
+# scratch.{algorithm}_{metric_table_account_id}_{lookback}_{market_id}_{retailer_scope}_{purchase_data_source}
+
+ONLINE_OFFLINE_PURCHASE_QUERY = """
+    CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_{purchase_data_source} AS
+    SELECT
+        account_id,
+        product_id,
+        country_code,
+        region,
+        sum(subtotal) as subtotal
+    FROM (
+        SELECT
+            account_id,
+            product_id,
+            country_code,
+            region,
+            subtotal
+        FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_online
+        UNION ALL
+        SELECT
+            account_id,
+            product_id,
+            country_code,
+            region,
+            subtotal
+        FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_offline
+    )
+    GROUP BY 1, 2, 3, 4
+"""
 
 def precompute_purchase_algorithm(recsets):
     result_counts = []
@@ -44,6 +87,8 @@ def precompute_purchase_algorithm(recsets):
             if recset and recset.algorithm == 'purchase':
                 log.log_info('processing recset {}'.format(recset.id))
                 result_counts.append(precompute_utils.process_noncollab_algorithm(warehouse_conn, recset,
-                                                                                  BESTSELLERS_LOOKBACK))
+                                                                                  ONLINE_PURCHASE_QUERY,
+                                                                                  OFFLINE_PURCHASE_QUERY,
+                                                                                  ONLINE_OFFLINE_PURCHASE_QUERY))
     log.log_info('ending precompute_purchase_algorithm process')
     return result_counts

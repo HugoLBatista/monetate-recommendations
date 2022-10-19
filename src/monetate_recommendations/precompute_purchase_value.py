@@ -8,8 +8,8 @@ from monetate_recommendations import precompute_utils
 
 log.configure_script_log('precompute_purchase_value_algorithm')
 
-TOPREVENUE_LOOKBACK = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope} AS
+ONLINE_PURCHASE_VALUE = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}_online AS
 /* Merchandiser: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 WITH purchase_line_value AS (
   SELECT
@@ -51,6 +51,56 @@ WHERE
 GROUP BY 1, 2, 3, 4;
 """
 
+OFFLINE_PURCHASE_VALUE = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_offline AS
+    SELECT
+        p1.account_id,
+        '' as country_code,
+        '' as region,
+        p1.product_id,
+        SUM(p1.quantity * p1.currency_unit_price * ex.rate) as subtotal
+    FROM 
+        scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+    JOIN config_account ca
+        ON ca.account_id = p1.account_id
+    JOIN exchange_rate ex
+        ON ex.effective_date::date = p1.fact_time::date
+        AND ex.from_currency_code = p1.currency
+        AND ex.to_currency_code = ca.currency
+    WHERE
+        p1.fact_time >= :begin_fact_time
+        AND p1.fact_time < :end_fact_time
+        AND p1.account_id = :account_id
+    GROUP BY 1, 2, 3, 4
+"""
+
+ONLINE_OFFLINE_PURCHASE_VALUE = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_{purchase_data_source} AS
+SELECT
+    account_id,
+    product_id,
+    country_code,
+    region,
+    sum(subtotal) as subtotal
+FROM (
+    SELECT
+        account_id,
+        product_id,
+        country_code,
+        region,
+        subtotal
+    FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_online
+    UNION ALL
+    SELECT
+        account_id,
+        product_id,
+        '' as country_code,
+        '' as region,
+        subtotal
+    FROM scratch.{algorithm}_{account_id}_{lookback_days}_{market_id}_{retailer_scope}_offline
+)
+GROUP BY 1, 2, 3, 4
+"""
 
 def precompute_purchase_value_algorithm(recsets):
     result_counts = []
@@ -64,6 +114,8 @@ def precompute_purchase_value_algorithm(recsets):
             if recset and recset.algorithm == 'purchase_value':
                 log.log_info('processing recset {}'.format(recset.id))
                 result_counts.append(precompute_utils.process_noncollab_algorithm(warehouse_conn, recset,
-                                                                                  TOPREVENUE_LOOKBACK))
+                                                                                  ONLINE_PURCHASE_VALUE,
+                                                                                  OFFLINE_PURCHASE_VALUE,
+                                                                                  ONLINE_OFFLINE_PURCHASE_VALUE))
     log.log_info('ending precompute_purchase_value_algorithm process')
     return result_counts

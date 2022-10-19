@@ -165,14 +165,20 @@ class RecsTestCase(SnowflakeTestCase):
             VALUES
                 (%s, %s, %s, %s)
             """,
-            (20, cls.product_catalog_id, cutoff_time, cutoff_time + timedelta(minutes=30)),
+            (20, cls.product_catalog_id, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
             # for pos join
-            (21, 2, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30))
+            (21, 2, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
+            (21, 5, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
+            (22, 6, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
+            (23, 7, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
+            (24, 8, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30))
         )
+        # make_row_list((cls.conn.execute("select dataset_id from config_dataset_data_expiration")))
 
     @patch_invalidations
     def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
-                       geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None):
+                       geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None,
+                       purchase_data_source="online"):
         # Insert row into config to mock out a lookback setting
         old_rec_setting = recs_models.AccountRecommendationSetting.objects.filter(account=self.account)
         if old_rec_setting:
@@ -198,6 +204,7 @@ class RecsTestCase(SnowflakeTestCase):
                 product_catalog=dio_models.Schema.objects.get(id=self.product_catalog_id),
                 retailer_market_scope=self._setup_retailer_market(retailer_market_scope, market),
                 market=self._setup_market(market),
+                purchase_data_source=purchase_data_source
             )
 
         if retailer_market_scope is True or market is True:
@@ -213,11 +220,13 @@ class RecsTestCase(SnowflakeTestCase):
              mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
              mock.patch('sqlalchemy.engine.Connection.close'),\
              mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
-                        autospec=True) as mock_suffix,\
-            mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
+                        autospec=True) as mock_suffix, \
+                mock.patch('monetate_recommendations.precompute_purchase_associated_pids.get_dataset_ids_for_pos') \
+                        as mock_pos_datasets, \
+                mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
                         autospec=True) as mock_pid_suffix:
+            mock_pos_datasets.return_value = [self.account_id, self.account_id]
             mock_suffix.return_value = unload_path, sent_time
-
             FUNC_MAP[algorithm]([recset])
         expected_results = expected_result_arr or [expected_result]
 
