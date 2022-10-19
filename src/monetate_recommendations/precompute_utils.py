@@ -763,18 +763,20 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
                      target=unload_path)
     return result_counts
 
+# TODO: function name here, only running offline query if certain conditions are met
 def create_helper_query_for_non_collab_algorithm(recset, account, market, retailer,
                                                  begin_fact_time, account_ids_dataset_ids, conn):
     if recset.algorithm in ["purchase", "trending", "purchase_value"]:
         # GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID is required in case of both online_offline and offline
         lookback_days = recset.lookback_days
-        if not account_ids_dataset_ids and recset.purchase_data_source in ["online_offline", "offline"]:
-            raise ValueError('Account/s {} has/have no offline purchase datasets'.format(account))
-        conn.execute(text(
-            precompute_purchase_associated_pids.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(
-                account_id=account, market_id=market,
-                retailer_id=retailer, lookback_days=lookback_days)), begin_fact_time=begin_fact_time,
-            aids_dids=account_ids_dataset_ids)
+        if recset.purchase_data_source in ["online_offline", "offline"]:
+            if not account_ids_dataset_ids:
+                raise ValueError('Account/s {} has/have no offline purchase datasets'.format(account))
+            conn.execute(text(
+                precompute_purchase_associated_pids.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(
+                    account_id=account, market_id=market,
+                    retailer_id=retailer, lookback_days=lookback_days)), begin_fact_time=begin_fact_time,
+                aids_dids=account_ids_dataset_ids)
 
 def get_account_ids_for_catalog_join_and_output(recset, queue_account):
     """
