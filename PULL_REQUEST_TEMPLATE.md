@@ -1,13 +1,24 @@
-## How:
-*
+# Why
 
-## Why:
-*
+https://kibo.atlassian.net/browse/NNN
 
-##### Notes:
-* JIRA Link: https://monetate.atlassian.net/browse/DEC-NNN
+This section is required.
 
-##### ToDo:
+# How
 
-- [ ] Unit tests: `@<testers_name>`
-- [ ] Tested on (local or remote) intbox
+This section is required.
+
+# Validation
+
+This section is required.
+
+## Risk and Mitigation Steps
+
+
+## Demo
+
+### Design Mocks
+
+### Before
+
+### After
