@@ -1,13 +1,37 @@
-## How:
-*
+# Why
 
-## Why:
-*
+https://kibo.atlassian.net/browse/NNN
 
-##### Notes:
-* JIRA Link: https://monetate.atlassian.net/browse/DEC-NNN
+This section is required.
 
-##### ToDo:
+Document your justification and intent.
 
-- [ ] Unit tests: `@<testers_name>`
-- [ ] Tested on (local or remote) intbox
+Describe in a couple of sentences what this PR adds.
+
+# How
+
+This section is required.
+
+List any concerns about this PR.
+(hacks, migrations, inelegant
+solutions)
+
+# Validation
+
+This section is required.
+
+1. Open page A
+2. Do thing B
+3. Expect C to happen
+4. If D happened instead - check failed.
+
+## Risk and Mitigation Steps
+
+
+## Demo
+
+### Design Mocks
+
+### Before
+
+### After
