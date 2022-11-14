@@ -42,7 +42,6 @@ setup(
         "ciso8601",
         "decorator<=4.1.2",  # last version which supports both py2 and py3
         "FormEncode",
-        "googleads",
         "idna<2.9",  # is required by snowflake-connector-python, requests
         "iso8601<=0.1.4",  # required by py2
         "isodate",
