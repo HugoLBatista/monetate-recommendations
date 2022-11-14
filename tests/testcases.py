@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import mock
 import json
 import os
+import random
 
 from django.utils import timezone
 import monetate.common.s3_filereader2 as s3_filereader2
@@ -127,7 +128,7 @@ class RecsTestCase(SnowflakeTestCase):
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00001', 'test', 'http://monetate.com/SKU-00001.jpg',
-             'TP-00001', 'http://monetate.com/1', 1.99, 'Clothing > Pants', 'Jean Pants', update_time, "ab", False,
+             'TP-00001', 'http://monetate.com/1', 1.99, 'Clothing > Shirt', 'T-Shirt', update_time, "ab", False,
              'black', 'In Stock', None),
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00002', 'test', 'http://monetate.com/SKU-00002.jpg',
              'TP-00002', 'http://monetate.com/2', 2.99, 'Clothing > Pants, test', 'Jean Pants', update_time, "bc",
@@ -298,6 +299,14 @@ class RecsTestCaseWithData(RecsTestCase):
 
         qty = 8
         within_2_day = datetime.now() - timedelta(days=1)
+        # slightly varying fact times are necessary for subsequent_purchase testing.
+        # timedelta is a seeded random amount, so it should be consistent across runs
+        random.seed(1234)
+        within_2_day_1 = within_2_day + timedelta(minutes=random.randint(0,60))
+        within_2_day_2 = within_2_day + timedelta(minutes=random.randint(0,60))
+        within_2_day_3 = within_2_day + timedelta(minutes=random.randint(0,60))
+        within_2_day_4 = within_2_day + timedelta(minutes=random.randint(0,60))
+        within_2_day_5 = within_2_day + timedelta(minutes=random.randint(0,60))
         within_7_day = datetime.now() - timedelta(days=5)
         within_30_day = datetime.now() - timedelta(days=29)
 
@@ -363,11 +372,11 @@ class RecsTestCaseWithData(RecsTestCase):
             (mid2, within_30_day, 'TP-00003', 'SKU-00004', 'purch_3', ),
             (mid2, within_30_day, 'TP-00004', 'SKU-00001', 'purch_4', ),
 
-            (mid2, within_2_day, 'TP-00001', 'SKU-00005', 'purch_1',),
-            (mid2, within_2_day, 'TP-00004', 'SKU-00001', 'purch_4',),
-            (mid2, within_2_day, 'TP-00005', 'SKU-00002', 'purch_5',),
-            (mid2, within_2_day, 'TP-00001', 'SKU-00005', 'purch_1',),
-            (mid2, within_2_day, 'TP-00002', 'SKU-00002', 'purch_2',),
+            (mid2, within_2_day_1, 'TP-00001', 'SKU-00005', 'purch_1',),
+            (mid2, within_2_day_2, 'TP-00004', 'SKU-00001', 'purch_4',),
+            (mid2, within_2_day_3, 'TP-00005', 'SKU-00002', 'purch_5',),
+            (mid2, within_2_day_4, 'TP-00001', 'SKU-00005', 'purch_1',),
+            (mid2, within_2_day_5, 'TP-00002', 'SKU-00002', 'purch_2',),
         ]
         cls.conn.execute(
             """
@@ -403,10 +412,10 @@ class RecsTestCaseWithData(RecsTestCase):
             (cls.retailer_id, 2, customer2, within_30_day, 'purch_3', 'TP-00003', 'SKU-00004'),
             (cls.retailer_id, 2, customer2, within_30_day, 'purch_4', 'TP-00004', 'SKU-00001'),
 
-            (cls.retailer_id, 2, customer2, within_2_day, 'purch_1', 'TP-00001', 'SKU-00005'),
-            (cls.retailer_id, 2, customer2, within_2_day, 'purch_2', 'TP-00002', 'SKU-00002'),
-            (cls.retailer_id, 2, customer2, within_2_day, 'purch_3', 'TP-00003', 'SKU-00004'),
-            (cls.retailer_id, 2, customer2, within_2_day, 'purch_4', 'TP-00004', 'SKU-00001'),
+            (cls.retailer_id, 2, customer2, within_2_day_1, 'purch_1', 'TP-00001', 'SKU-00005'),
+            (cls.retailer_id, 2, customer2, within_2_day_2, 'purch_2', 'TP-00002', 'SKU-00002'),
+            (cls.retailer_id, 2, customer2, within_2_day_3, 'purch_3', 'TP-00003', 'SKU-00004'),
+            (cls.retailer_id, 2, customer2, within_2_day_4, 'purch_4', 'TP-00004', 'SKU-00001'),
         ]
 
         cls.conn.execute(
@@ -503,13 +512,32 @@ class RecsTestCaseWithData(RecsTestCase):
                 actual_result = actual_results[i]
                 if recset.account:
                     self.assertEqual(actual_result['account']['id'], recset.account.id)
-                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS')
+                self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS', "\nExpected context item {}\n"
+                                           "Expected recs is: {} \n"
+                                            "Actual rec context item is {} \n"
+                                            "Actual recs are: {}".format(item[0], item[1],
+                                                                 actual_result['document']['lookup_key'],
+                                                                 actual_result['document']['data']))
+                self.assertEqual(len(actual_result['document']['data']), len(item[1]), "\nExpected context item {}\n"
+                                            "Expected recs is: {} \n"
+                                            "Actual rec context item is {} \n"
+                                            "Actual recs are: {}".format(item[0], item[1],
+                                                                 actual_result['document']['lookup_key'],
+                                                                 actual_result['document']['data']))
+                self.assertEqual(actual_result['document']['lookup_key'], item[0], "\nExpected context item {}\n"
+                                            "Expected recs is: {} \n"
+                                            "Actual rec context item is {} \n"
+                                            "Actual recs are: {}".format(item[0], item[1],
+                                                                 actual_result['document']['lookup_key'],
+                                                                 actual_result['document']['data']))
 
-                self.assertEqual(len(actual_result['document']['data']), len(item[1]))
-                self.assertEqual(actual_result['document']['lookup_key'], item[0])
                 data = actual_result['document']['data']
                 for i, row in enumerate(item[1]):
-                    self.assertEqual(row[0], data[i]['id'])
-                    self.assertEqual(row[1], data[i]['rank'])
+                    self.assertEqual(row[0], data[i]['id'], "\nExpected context item {}\n"
+                                                            "Actual rec context item is {} \n"
+                                                            "Actual recs returned is: {}".format(item[0],
+                                                                actual_result['document']['lookup_key'], data))
+                    self.assertEqual(row[1], data[i]['rank'], "\nTest failed on context item {}\n"
+                                            "Actual recs returned is: {}".format(item[0], data))
 
 

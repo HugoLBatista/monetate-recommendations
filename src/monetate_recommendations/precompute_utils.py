@@ -300,7 +300,7 @@ WITH
         SELECT
             lookup_key,
             id,
-            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC) AS ordinal,
+            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal,
             normalized_score
         FROM sku_algo
     )
@@ -400,7 +400,7 @@ def collab_dynamic_filter_query(recset_dynamic_filter, global_dynamic_filter, ca
         # the query is used when we have dynamic filters in a rec strategy for collab algo
         # this query is used in the SKU_RANKS_BY_COLLAB_RECSET query in place of the {dynamic_filter} variable
         dynamic_filter_query = """
-        JOIN filtered_catalog context
+        JOIN latest_catalog context
         ON pid_algo.lookup_key = context.item_group_id
         WHERE {}""".format(dynamic_filter_sql)
         return dynamic_filter_query
@@ -632,6 +632,35 @@ def get_recset_ids(recset_group):
     return []
 
 
+def get_algo_filter_dict(algorithm):
+
+    # sane default
+    algo_dict = {
+        "filters":[]
+    }
+
+    # only one algo filter should be active at a time
+    # currently, there is only one algo-level filter
+    # TODO: if more algo-level filters are required in the future, we should simplify/clean this up.
+    # TODO: maybe something similar to the funcmap
+    if algorithm == "bought_together":
+        algo_dict["filters"] = [
+            {"left":
+                {
+                    "type":"field",
+                    "field":"product_type"
+                },
+                "type":"not startswith",
+                "right":
+                {
+                    "type":"function",
+                    "value":"items_from_base_recommendation_on"
+                }
+             }
+        ]
+
+    return algo_dict
+
 def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=None, online_offline_query=None):
     """
     Example JSON shape unloaded to s3:
@@ -818,8 +847,19 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
             except dio_models.DefaultAccountCatalog.DoesNotExist:
                 log.log_info("Skipping {} with account id {}, no catalog set found".format(account_id, account_id.id))
                 continue
+
+            # get algo_filter json
+            algo_filter_dict = get_algo_filter_dict(recset.algorithm)
+
+            # add algo_filter to the recset filters
+            recset_filter_dict = json.loads(recset.filter_json)
+            recset_filter_dict['filters'].extend(algo_filter_dict['filters'])
+            final_filter_json = json.dumps(recset_filter_dict)
+
+            # pass the algorithm into get_static_and_dynamic_filter and return algo_filter_sql
+            # along with the other filter sql
             static_filter_sql, static_filter_variables, dynamic_filter_sql = get_static_and_dynamic_filter(
-                recset.filter_json, global_filter_json, catalog_fields)
+                final_filter_json, global_filter_json, catalog_fields)
             # this query explodes the pid to sku to create a pid-sku relation
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,

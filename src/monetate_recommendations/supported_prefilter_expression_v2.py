@@ -42,7 +42,7 @@ def startswith_expression(expression, catalog_fields):
     value = expression["right"]["value"]
 
     if field == "product_type" and expression["right"]["type"] == "function":
-        return text("any_startswith_udf(recommendation.product_type, context.product_type)")
+        return text("any_startswith_udf(parse_csv_string_udf(recommendation.product_type), parse_csv_string_udf(context.product_type))")
 
     like_statements = []
     for i in value:

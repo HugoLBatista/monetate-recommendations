@@ -13,7 +13,9 @@ from monetate.recs.models import PrecomputeQueue
 FUNC_MAP = {
     'purchase_also_purchase': process_purchase_collab_algorithm,
     'view_also_view': process_view_collab_algorithm,
-    'similar_products_v2': process_catalog_collab_algorithm
+    'similar_products_v2': process_catalog_collab_algorithm,
+    'bought_together': process_purchase_collab_algorithm,
+    'subsequently_purchased': process_purchase_collab_algorithm,
 }
 
 def initialize_collab_algorithm(queue_entries, algorithm):

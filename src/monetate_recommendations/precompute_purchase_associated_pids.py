@@ -114,12 +114,106 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
     HAVING count(*) >= :minimum_count
 """
 
+ONLINE_OFFLINE_SUBS_PURCH_QUERY = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source} AS
+WITH intermediate_query AS (
+    SELECT
+        account_id,
+        pid1,
+        pid2,
+        count(*) score
+    FROM (
+        SELECT
+            p1.account_id account_id,
+            p1.product_id pid1,
+            p2.product_id pid2,
+            count(*) score
+        FROM scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+        JOIN scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+            ON p1.account_id = p2.account_id
+            AND p1.mid_epoch = p2.mid_epoch
+            AND p1.mid_ts = p2.mid_ts
+            AND p1.mid_rnd = p2.mid_rnd
+            AND p1.product_id != p2.product_id
+            AND p1.fact_time < p2.fact_time
+        GROUP BY 1, 2, 3
+        HAVING count(*) >= :minimum_count  
+        UNION ALL
+        SELECT
+            p1.account_id account_id,
+            p1.product_id pid1,
+            p2.product_id pid2,
+            count(*) score
+        FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+        JOIN scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+            ON p1.dataset_id = p2.dataset_id
+            AND p1.customer_id = p2.customer_id
+            AND p1.product_id != p2.product_id
+            AND p1.fact_time < p2.fact_time
+        GROUP BY 1, 2, 3
+        HAVING count(*) >= :minimum_count
+    )
+    GROUP BY 1, 2, 3
+)
+SELECT account_id, pid1, pid2, sum(score) score
+FROM intermediate_query
+GROUP BY 1, 2, 3
+"""
+
+ONLINE_SUBS_PURCH_QUERY = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_online AS
+    SELECT
+        p1.account_id account_id,
+        p1.product_id pid1,
+        p2.product_id pid2,
+        count(*) score
+    FROM scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+    JOIN scratch.last_purchase_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+        ON p1.account_id = p2.account_id
+        AND p1.mid_epoch = p2.mid_epoch
+        AND p1.mid_ts = p2.mid_ts
+        AND p1.mid_rnd = p2.mid_rnd
+        AND p1.product_id != p2.product_id
+        AND p1.fact_time < p2.fact_time
+    GROUP BY 1, 2, 3
+    HAVING count(*) >= :minimum_count
+"""
+
+OFFLINE_SUBS_PURCH_QUERY = """
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_offline AS
+    SELECT
+        p1.account_id account_id,
+        p1.product_id pid1,
+        p2.product_id pid2,
+        count(*) score
+    FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
+    JOIN scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
+        ON p1.dataset_id = p2.dataset_id
+        AND p1.customer_id = p2.customer_id
+        AND p1.product_id != p2.product_id
+        AND p1.fact_time < p2.fact_time
+    GROUP BY 1, 2, 3
+    HAVING count(*) >= :minimum_count
+"""
+
 QUERY_DISPATCH = {
     "purchase_also_purchase": {
         "online_offline": ONLINE_OFFLINE_PAP_QUERY,
         "online": ONLINE_PAP_QUERY,
         "offline": OFFLINE_PAP_QUERY,
-    }
+    },
+    # bought together is the same as purchase also purchase but with an
+    # algorithm-level filter on product type
+    "bought_together": {
+        "online_offline": ONLINE_OFFLINE_PAP_QUERY,
+        "online": ONLINE_PAP_QUERY,
+        "offline": OFFLINE_PAP_QUERY,
+    },
+    "subsequently_purchased": {
+        "online_offline": ONLINE_OFFLINE_SUBS_PURCH_QUERY,
+        "online": ONLINE_SUBS_PURCH_QUERY,
+        "offline": OFFLINE_SUBS_PURCH_QUERY,
+    },
 }
 
 # TODO: Refactor online_offline to call online and offline helper queries
