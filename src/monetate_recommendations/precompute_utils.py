@@ -17,8 +17,9 @@ import monetate.dio.models as dio_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
+from monetate_recommendations import supported_prefilter_expression_v3 as new_filters
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES
-from .supported_prefilter_expression import FILTER_MAP
+from .supported_prefilter_expression_v3 import FILTER_MAP
 from monetate_recommendations import precompute_purchase_associated_pids
 from .precompute_purchase_associated_pids import get_dataset_ids_for_pos, GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
 
@@ -394,7 +395,7 @@ def parse_collab_filters(filter_json, catalog_fields):
 
 def collab_dynamic_filter_query(recset_dynamic_filter, global_dynamic_filter, catalog_fields):
     if recset_dynamic_filter['filters'] or global_dynamic_filter['filters']:
-        dynamic_filter_sql, dynamic_filter_variables = filters.get_query_and_variables_collab(recset_dynamic_filter,
+        dynamic_filter_sql, dynamic_filter_variables = new_filters.get_query_and_variables_collab(recset_dynamic_filter,
                                                                                               global_dynamic_filter,
                                                                                               catalog_fields)
         # the query is used when we have dynamic filters in a rec strategy for collab algo
@@ -412,7 +413,7 @@ def get_static_and_dynamic_filter(recset_filter, global_filter, catalog_fields):
     recset_static_filter, recset_dynamic_filter = parse_collab_filters(recset_filter, catalog_fields)
     global_static_filter, global_dynamic_filter = parse_collab_filters(global_filter, catalog_fields)
     dynamic_filter_sql = collab_dynamic_filter_query(recset_dynamic_filter,global_dynamic_filter, catalog_fields)
-    static_filter_sql, static_filter_variables = filters.get_query_and_variables_collab(recset_static_filter,
+    static_filter_sql, static_filter_variables = new_filters.get_query_and_variables_collab(recset_static_filter,
                                            global_static_filter, catalog_fields)
     return ('WHERE ' + static_filter_sql), static_filter_variables, dynamic_filter_sql
 
@@ -705,7 +706,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
         global_early_filter_exp, global_late_filter_exp, global_has_dynamic_filter = \
             parse_non_collab_filters(global_filter_json, catalog_fields)
         has_dynamic_filter = has_dynamic_filter or global_has_dynamic_filter
-        early_filter_sql, late_filter_sql, filter_variables = supported_prefilter_expression.get_query_and_variables(
+        early_filter_sql, late_filter_sql, filter_variables = new_filters.get_query_and_variables_non_collab(
             early_filter_exp, late_filter_exp, global_early_filter_exp, global_late_filter_exp, catalog_fields)
         account_ids = get_account_ids_for_market_driven_recsets(recset, account_id)
         account = None if recset.is_market_or_retailer_driven_ds else account_id
@@ -723,7 +724,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
             )
         account_ids_dataset_ids = precompute_purchase_associated_pids.get_dataset_ids_for_pos(account_ids)
         create_helper_query_for_non_collab_algorithm(recset, account, market, retailer,
-                                                     begin_fact_time, account_ids_dataset_ids, conn)
+                                                      begin_fact_time, account_ids_dataset_ids, conn)
 
         if recset.purchase_data_source in ["online", "online_offline"]:
             # online_query
