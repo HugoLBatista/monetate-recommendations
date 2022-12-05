@@ -62,6 +62,39 @@ SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
 """
 
+SNOWFLAKE_UNLOAD_2 = """
+COPY
+INTO :target
+FROM (
+    SELECT object_construct(
+        'shard_key', :shard_key,
+        'document', object_construct(
+            'pushdown_filter_hash', sha1(LOWER(CONCAT('product_type=', {dynamic_product_type} {geo_hash_sql}))),
+            'lookup_key', 'NULL',
+            'pushdown_filter_json', LOWER(CONCAT('product_type=', {dynamic_product_type})),
+            'data', (
+                array_agg(object_construct('id', id, 'normalized_score', score, 'rank', rank))
+                WITHIN GROUP (ORDER BY rank ASC)
+            )
+        ),
+        'sent_time', :sent_time,
+        'account', object_construct(
+            'id', :account_id
+        ),
+        'schema', object_construct(
+            'feed_type', 'RECSET_RECS',
+            'id', :recset_id
+        )
+    )
+    FROM scratch.recset_{account_id}_{recset_id}_ranks
+    {group_by}
+)
+FILE_FORMAT = (TYPE = JSON, compression='gzip')
+SINGLE=TRUE
+MAX_FILE_SIZE=1000000000
+
+"""
+
 SNOWFLAKE_UNLOAD_COLLAB = """
 COPY 
 INTO :target
@@ -538,8 +571,18 @@ def create_unload_target_path(account_id, recset_id):
                 vshard_upper=vshard_upper,
                 account_id=account_id,
                 recset_id=recset_id)
+    #todo;
+    new_path = '{data_jurisdiction}/{bucket_time:%Y/%m/%d}/{data_jurisdiction}-{bucket_time:%Y%m%dT%H%M%S.000Z}_PT' \
+               '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{account_id}_{recset_id}_new.json.gz'\
+            .format(data_jurisdiction=DATA_JURISDICTION,
+                bucket_time=bucket_time,
+                interval_duration=interval_duration,
+                vshard_lower=vshard_lower,
+                vshard_upper=vshard_upper,
+                account_id=account_id,
+                recset_id=recset_id)
 
-    return os.path.join(stage, path), bucket_time
+    return os.path.join(stage, path), os.path.join(stage, new_path), bucket_time
 
 
 def unload_target_pid_path(account_id, market_id, retailer_id, algorithm, lookback_days):
@@ -765,7 +808,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
                     begin_7_day_session_time=begin_session_time, end_7_day_session_time=end_session_time,
                     begin_30_day_session_time=begin_30_day_session_time, end_30_day_session_time=end_30_day_session_time)
 
-        unload_path, send_time = create_unload_target_path(account_id, recset.id)
+        unload_path, new_unload_path, send_time = create_unload_target_path(account_id, recset.id)
         unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
 
         conn.execute(text(SKU_RANKS_BY_RECSET.format(algorithm=recset.algorithm,
@@ -791,6 +834,13 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
                      recset_id=recset.id,
                      sent_time=send_time,
                      target=unload_path)
+
+        conn.execute(text(SNOWFLAKE_UNLOAD_2.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
+                     shard_key=get_shard_key(account_id),
+                     account_id=account_id,
+                     recset_id=recset.id,
+                     sent_time=send_time,
+                     target=new_unload_path)
     return result_counts
 
 # TODO: function name here, only running offline query if certain conditions are met
@@ -875,7 +925,7 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
                          catalog_dataset_id=catalog_id,
                          **static_filter_variables)
 
-            unload_path, send_time = create_unload_target_path(account_id.id, recset.id)
+            unload_path, new_unload_path, send_time = create_unload_target_path(account_id.id, recset.id)
             result_counts.append(get_single_value_query(conn.execute(text(
                 RESULT_COUNT.format(recset_id=recset.id,account_id=account_id.id,))), 0))
             # this query write the pid-sku relation to s3

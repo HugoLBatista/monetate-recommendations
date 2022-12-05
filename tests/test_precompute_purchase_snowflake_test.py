@@ -150,6 +150,7 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00005(SKU-00005/SKU-00006): 6
         # TP-00002(SKU-00002): 5
         # TP-00003(SKU-00003): 3
+        #todo: try to pass assertions dynamically
         filter_json = json.dumps({"type": "and", "filters": []})
         self._run_recs_test(algorithm="purchase", lookback=7, filter_json=filter_json, expected_result=[
             ('SKU-00005', 1),
