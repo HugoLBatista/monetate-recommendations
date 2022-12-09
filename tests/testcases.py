@@ -214,9 +214,11 @@ class RecsTestCase(SnowflakeTestCase):
             self.assertEqual([self.account_id],  get_account_ids_for_market_driven_recsets(recset, -1))
 
         # A run_id is added to path as part of the setup in SnowflakeTestCase to update stages
-        unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
+        unload_path, new_unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
 
         s3_url = get_stage_s3_uri_prefix(self.conn, unload_path)
+
+        new_s3_url = get_stage_s3_uri_prefix(self.conn, new_unload_path)
 
         with mock.patch('monetate.common.job_timing.record_job_timing'),\
              mock.patch('contextlib.closing', return_value=self.conn),\
@@ -229,15 +231,22 @@ class RecsTestCase(SnowflakeTestCase):
                 mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
                         autospec=True) as mock_pid_suffix:
             mock_pos_datasets.return_value = [self.account_id, self.account_id]
-            mock_suffix.return_value = unload_path, sent_time
+            mock_suffix.return_value = unload_path, new_unload_path, sent_time
             FUNC_MAP[algorithm]([recset])
         expected_results = expected_result_arr or [expected_result]
 
+        # TODO; Update these tests when old snowflake unload path is removed.
         actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)]
+        actual_results_2 = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(new_s3_url)]
 
+        self._run_assertions(expected_results, actual_results, pushdown_filter_hashes, recset, unload_type="old")
+        self._run_assertions(expected_results, actual_results_2, pushdown_filter_hashes, recset, unload_type="new")
+
+    def _run_assertions(self, expected_results, actual_results, pushdown_filter_hashes, recset, unload_type):
         self.assertEqual(len(actual_results), len(expected_results))
         for result_line in range(0, len(expected_results)):
             expected_result = expected_results[result_line]
+            expected_feed_type = 'RECSET_NONCOLLAB_RECS' if unload_type == "old" else "RECSET_RECS"
             # lookup actual_result by pushdown_filter_hash if included otherwise assume results are in order
             actual_result = [result for result in actual_results if
                              result['document']['pushdown_filter_hash'] == pushdown_filter_hashes[result_line]][0] \
@@ -245,14 +254,14 @@ class RecsTestCase(SnowflakeTestCase):
             # equal number product records vs expected
             self.assertEqual(len(actual_result['document']['data']), len(expected_result))
             self.assertEqual(actual_result['account']['id'], recset.account.id)
-            self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_NONCOLLAB_RECS')
+            self.assertEqual(actual_result['schema']['feed_type'], expected_feed_type)
             self.assertEqual(actual_result['schema']['id'], recset.id)
 
             # records match expected
             for i, item in enumerate(expected_result):
                 self.assertEqual(item[0], actual_result['document']['data'][i]['id'])
                 self.assertEqual(item[1], actual_result['document']['data'][i]['rank'])
-
+                
     @classmethod
     def _setup_market(cls, setup):
         if setup is True:
@@ -461,8 +470,8 @@ class RecsTestCaseWithData(RecsTestCase):
         unload_result = []
         s3_urls = []
         for recset in recsets:
-            unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
-            unload_result.append((unload_path, sent_time))
+            unload_path, new_unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
+            unload_result.append((unload_path, new_unload_path, sent_time))
             s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
                 mock.patch('monetate_recommendations.precompute_purchase_associated_pids.get_dataset_ids_for_pos') \
@@ -476,7 +485,7 @@ class RecsTestCaseWithData(RecsTestCase):
                            autospec=True) as mock_pid_suffix:
             mock_pos_datasets.return_value = [1, 2]
             mock_pid_suffix.return_value = unload_pid_path, pid_send_time
-            mock_suffix.side_effect = [(unload_path, sent_time) for unload_path, sent_time in unload_result]
+            mock_suffix.side_effect = [(unload_path, new_unload_path, sent_time) for unload_path, new_unload_path, sent_time in unload_result]
             initialize_collab_algorithm([recset_group], algorithm)
 
         # test pid - pid (recset group)
