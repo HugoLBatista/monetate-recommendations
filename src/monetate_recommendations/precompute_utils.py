@@ -70,7 +70,7 @@ FROM (
         'shard_key', :shard_key,
         'document', object_construct(
             'pushdown_filter_hash', sha1(LOWER(CONCAT('product_type=', {dynamic_product_type} {geo_hash_sql}))),
-            'lookup_key', 'NULL',
+            'lookup_key', '',
             'pushdown_filter_json', LOWER(CONCAT('product_type=', {dynamic_product_type})),
             'data', (
                 array_agg(object_construct('id', id, 'normalized_score', score, 'rank', rank))
@@ -571,7 +571,6 @@ def create_unload_target_path(account_id, recset_id):
                 vshard_upper=vshard_upper,
                 account_id=account_id,
                 recset_id=recset_id)
-    #todo;
     new_path = '{data_jurisdiction}/{bucket_time:%Y/%m/%d}/{data_jurisdiction}-{bucket_time:%Y%m%dT%H%M%S.000Z}_PT' \
                '{interval_duration}M-{vshard_lower}-{vshard_upper}-precompute_{account_id}_{recset_id}_new.json.gz'\
             .format(data_jurisdiction=DATA_JURISDICTION,
@@ -835,12 +834,16 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
                      sent_time=send_time,
                      target=unload_path)
 
-        conn.execute(text(SNOWFLAKE_UNLOAD_2.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
-                     shard_key=get_shard_key(account_id),
-                     account_id=account_id,
-                     recset_id=recset.id,
-                     sent_time=send_time,
-                     target=new_unload_path)
+        # Unload to new path only if feature flag is enabled.
+        precompute_feature = retailer_models.ACCOUNT_FEATURES.UNIFIED_PRECOMPUTE
+        account_obj = retailer_models.Account.objects.get(id=account_id)
+        if account_obj.has_feature(precompute_feature):
+            conn.execute(text(SNOWFLAKE_UNLOAD_2.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
+                        shard_key=get_shard_key(account_id),
+                        account_id=account_id,
+                        recset_id=recset.id,
+                        sent_time=send_time,
+                        target=new_unload_path)
     return result_counts
 
 # TODO: function name here, only running offline query if certain conditions are met
