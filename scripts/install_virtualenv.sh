@@ -57,7 +57,7 @@ if [ ! -d "$virtualenv_dir" ]; then
 	mkdir $virtualenv_dir
 	echo "$virtualenv_dir created!"
 else
-	if [ "$isNoInput" == "true" ]; then
+  if [ "$isNoInput" == "true" ]; then
     folder_exists $virtualenv_dir
   else
     echo "$virtualenv_dir exists!"
