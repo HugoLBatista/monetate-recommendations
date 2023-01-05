@@ -69,9 +69,9 @@ FROM (
     SELECT object_construct(
         'shard_key', :shard_key,
         'document', object_construct(
-            'pushdown_filter_hash', sha1(LOWER(CONCAT('product_type=', {dynamic_product_type} {geo_hash_sql}))),
+            'pushdown_filter_hash', sha1(LOWER(CONCAT({pushdown_filter_str}))),
             'lookup_key', '',
-            'pushdown_filter_json', object_construct('product_type', {dynamic_product_type}),
+            'pushdown_filter_data', LOWER(CONCAT({pushdown_filter_str})),
             'data', (
                 array_agg(object_construct('id', id, 'normalized_score', score, 'rank', rank))
                 WITHIN GROUP (ORDER BY rank ASC)
@@ -547,6 +547,21 @@ def get_unload_sql(geo_target, has_dynamic_filter):
         'rank_query': rank_query.format(partition_by=partition_by)
     }
 
+def get_pushdown_filter_json(unload_sql_params, geo_target):
+    pushdown_filter_json = {'product_type':unload_sql_params['dynamic_product_type']}
+    geo_cols = GEO_TARGET_COLUMNS.get(geo_target, None)
+
+    for col in geo_cols:
+        pushdown_filter_json["_"+col] = "IFNULL({},'')".format(col)
+
+    return pushdown_filter_json
+
+def get_pushdown_filter_str(pushdown_filter_json):
+    keys = sorted(pushdown_filter_json.keys())
+    pushdown_filter_str = ""
+    for key in keys:
+        pushdown_filter_str += "'/{}=',{},".format(key, pushdown_filter_json[key])
+    return pushdown_filter_str[:-1]
 
 def get_path_info(key_id):
     stage = getattr(settings, 'SNOWFLAKE_DATAIO_STAGE', '@dataio_stage_v1')
@@ -766,7 +781,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
             )
         account_ids_dataset_ids = precompute_purchase_associated_pids.get_dataset_ids_for_pos(account_ids)
         create_helper_query_for_non_collab_algorithm(recset, account, market, retailer,
-                                                      begin_fact_time, account_ids_dataset_ids, conn)
+                                                       begin_fact_time, account_ids_dataset_ids, conn)
 
         if recset.purchase_data_source in ["online", "online_offline"]:
             # online_query
@@ -809,6 +824,8 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
 
         unload_path, new_unload_path, send_time = create_unload_target_path(account_id, recset.id)
         unload_sql = get_unload_sql(recset.geo_target, has_dynamic_filter)
+        pushdown_filter_json = get_pushdown_filter_json(unload_sql, recset.geo_target)
+        pushdown_filter_str = get_pushdown_filter_str(pushdown_filter_json)
 
         conn.execute(text(SKU_RANKS_BY_RECSET.format(algorithm=recset.algorithm,
                                                      recset_id=recset.id,
@@ -838,7 +855,9 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
         precompute_feature = retailer_models.ACCOUNT_FEATURES.UNIFIED_PRECOMPUTE
         account_obj = retailer_models.Account.objects.get(id=account_id)
         if account_obj.has_feature(precompute_feature):
-            conn.execute(text(SNOWFLAKE_UNLOAD_2.format(recset_id=recset.id, account_id=account_id, **unload_sql)),
+            conn.execute(text(SNOWFLAKE_UNLOAD_2.format(recset_id=recset.id, account_id=account_id,
+            pushdown_filter_str=pushdown_filter_str,
+            **unload_sql)),
                         shard_key=get_shard_key(account_id),
                         account_id=account_id,
                         recset_id=recset.id,
