@@ -261,7 +261,7 @@ class RecsTestCase(SnowflakeTestCase):
             for i, item in enumerate(expected_result):
                 self.assertEqual(item[0], actual_result['document']['data'][i]['id'])
                 self.assertEqual(item[1], actual_result['document']['data'][i]['rank'])
-                
+       
     @classmethod
     def _setup_market(cls, setup):
         if setup is True:

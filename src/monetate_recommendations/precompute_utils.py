@@ -69,9 +69,9 @@ FROM (
     SELECT object_construct(
         'shard_key', :shard_key,
         'document', object_construct(
-            'pushdown_filter_hash', sha1(LOWER(CONCAT({pushdown_filter_str}))),
+            'pushdown_filter_hash', sha1(LOWER(TO_JSON(object_construct({pushdown_filter_str})))),
             'lookup_key', '',
-            'pushdown_filter_data', LOWER(CONCAT({pushdown_filter_str})),
+            'pushdown_filter_json', LOWER(TO_JSON(object_construct({pushdown_filter_str}))),
             'data', (
                 array_agg(object_construct('id', id, 'normalized_score', score, 'rank', rank))
                 WITHIN GROUP (ORDER BY rank ASC)
@@ -549,7 +549,7 @@ def get_unload_sql(geo_target, has_dynamic_filter):
 
 def get_pushdown_filter_json(unload_sql_params, geo_target):
     pushdown_filter_json = {'product_type':unload_sql_params['dynamic_product_type']}
-    geo_cols = GEO_TARGET_COLUMNS.get(geo_target, None)
+    geo_cols = GEO_TARGET_COLUMNS.get(geo_target, [])
 
     for col in geo_cols:
         pushdown_filter_json["_"+col] = "IFNULL({},'')".format(col)
@@ -557,10 +557,11 @@ def get_pushdown_filter_json(unload_sql_params, geo_target):
     return pushdown_filter_json
 
 def get_pushdown_filter_str(pushdown_filter_json):
+    # Sort the json by keys to avoid creating different hash for the same json.
     keys = sorted(pushdown_filter_json.keys())
     pushdown_filter_str = ""
     for key in keys:
-        pushdown_filter_str += "'/{}=',{},".format(key, pushdown_filter_json[key])
+        pushdown_filter_str += "'{}',{},".format(key, pushdown_filter_json[key])
     return pushdown_filter_str[:-1]
 
 def get_path_info(key_id):
