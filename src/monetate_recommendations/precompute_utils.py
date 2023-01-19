@@ -20,8 +20,8 @@ from monetate_recommendations import supported_prefilter_expression_v2 as filter
 from monetate_recommendations import supported_prefilter_expression_v3 as new_filters
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, DATA_TYPE_TO_SNOWFLAKE_TYPE
 from .supported_prefilter_expression_v3 import FILTER_MAP
-from monetate_recommendations import precompute_purchase_associated_pids
-from .precompute_purchase_associated_pids import get_dataset_ids_for_pos, GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
+import precompute_purchase_associated_pids
+# from .precompute_purchase_associated_pids import get_dataset_ids_for_pos, GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -312,18 +312,18 @@ WITH
     {static_filter}
     ),
      context_items_attributes AS (
-       SELECT distinct context.item_group_id {context_attributes}
+      SELECT distinct context.item_group_id {context_attributes}
       FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
-      JOIN filtered_catalog context
+      JOIN latest_catalog context
       ON pid_algo.lookup_key = context.item_group_id
     ),
     
     recommendation_item_attributes AS (
-        SELECT distinct recommendation.item_Group_id, max(recommendation.id) as id, recommendation.color, recommendation.image_link {recommendation_attributes}
+        SELECT recommendation.item_group_id, max(recommendation.id) as id, recommendation.color, recommendation.image_link {recommendation_attributes}
         FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
         JOIN filtered_catalog recommendation
         ON pid_algo.lookup_key = recommendation.item_group_id
-       GROUP BY 1,recommendation.color,recommendation.image_link {recommendation_group_by}
+        {recommendation_attributes_group_by}
     ),
     sku_algo AS (
         /* Explode recommended product ids into recommended representative skus */
@@ -456,24 +456,27 @@ def collab_dynamic_filter_query(recset_dynamic_filter, global_dynamic_filter, ca
 def get_item_attributes_from_filtered_catalog(recset_dynamic_filter, global_dynamic_filter, catalog_fields):
     context_attributes = ""
     recommendation_attributes = ""
-    recommendation_group_by = ""
+    recommendation_attributes_group_by = "GROUP BY recommendation.item_group_id, recommendation.color, recommendation.image_link"
     dynamic_filters = recset_dynamic_filter['filters'] + global_dynamic_filter['filters']
     if dynamic_filters:
+        has_custom_attributes = False
         for each in dynamic_filters:
             attribute = each["left"]["field"]
             field = "{}".format(attribute)
             if attribute not in SUPPORTED_PREFILTER_FIELDS:
+                has_custom_attributes = True
                 snowflake_type = [field["data_type"] for field in catalog_fields if field["name"] == attribute][0]
                 field = "custom:{}::{} as {}".format(attribute, snowflake_type, attribute.lower())
 
-            context_attributes += ", context.{} ".format(field)
-            recommendation_attributes += ", recommendation.{} ".format(field)
-            recommendation_group_by += ", {} ".format(attribute.lower())
+            context_attributes += ", context.{}".format(field)
+            recommendation_attributes += ", recommendation.{}".format(field)
+            recommendation_attributes_group_by += ", {}".format(attribute.lower())
 
-        context_attributes += ", context.custom"
-        recommendation_attributes += ", max(recommendation.custom) as custom"
-        return context_attributes, recommendation_attributes, recommendation_group_by
-    return '', '', ''
+        if has_custom_attributes:
+            context_attributes += ", context.custom"
+            recommendation_attributes += ", recommendation.custom"
+            recommendation_attributes_group_by += ", recommendation.custom"
+    return context_attributes, recommendation_attributes, recommendation_attributes_group_by
 
 def get_static_and_dynamic_filter(recset_filter, global_filter, catalog_fields):
 
@@ -482,8 +485,8 @@ def get_static_and_dynamic_filter(recset_filter, global_filter, catalog_fields):
     dynamic_filter_sql = collab_dynamic_filter_query(recset_dynamic_filter,global_dynamic_filter, catalog_fields)
     static_filter_sql, static_filter_variables = new_filters.get_query_and_variables_collab(recset_static_filter,
                                            global_static_filter, catalog_fields)
-    context_attributes, recommendation_attributes, recommendation_group_by = get_item_attributes_from_filtered_catalog(recset_dynamic_filter, global_dynamic_filter, catalog_fields)
-    return ('WHERE ' + static_filter_sql), static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_group_by
+    context_attributes, recommendation_attributes, recommendation_attributes_group_by = get_item_attributes_from_filtered_catalog(recset_dynamic_filter, global_dynamic_filter, catalog_fields)
+    return ('WHERE ' + static_filter_sql), static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_attributes_group_by
 
 
 def get_fact_time(lookback):
@@ -967,7 +970,7 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
 
             # pass the algorithm into get_static_and_dynamic_filter and return algo_filter_sql
             # along with the other filter sql
-            static_filter_sql, static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_group_by = get_static_and_dynamic_filter(
+            static_filter_sql, static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_attributes_group_by = get_static_and_dynamic_filter(
                 final_filter_json, global_filter_json, catalog_fields)
             # this query explodes the pid to sku to create a pid-sku relation
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
@@ -980,7 +983,7 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
                                                                 static_filter=static_filter_sql,
                                                                 context_attributes=context_attributes,
                                                                 recommendation_attributes=recommendation_attributes,
-                                                                recommendation_group_by=recommendation_group_by
+                                                                recommendation_attributes_group_by=recommendation_attributes_group_by
                                                                 )),
                          retailer_id=recset.retailer.id,
                          catalog_dataset_id=catalog_id,
