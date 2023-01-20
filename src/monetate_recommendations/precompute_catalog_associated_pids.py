@@ -1,7 +1,7 @@
 import json
 from sqlalchemy.sql import text
 import precompute_utils
-from monetate.common import log, job_timing
+from monetate_monitoring import log
 import monetate.retailer.models as retailer_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
 from monetate_recommendations import supported_weights_expression

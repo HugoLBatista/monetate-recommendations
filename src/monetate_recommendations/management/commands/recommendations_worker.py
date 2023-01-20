@@ -1,5 +1,5 @@
 from django.core.management import BaseCommand
-from monetate.common import log
+from monetate_monitoring import log
 from monetate_recommendations.precompute_worker import PrecomputeWorker, DEFAULTS
 
 

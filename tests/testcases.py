@@ -14,7 +14,7 @@ from monetate_recommendations import precompute_utils
 from monetate_recommendations.precompute_algo_map import FUNC_MAP
 from monetate_recommendations.precompute_collab_algo_map import initialize_collab_algorithm
 import monetate.dio.models as dio_models
-from monetate.retailer.cache import invalidation_context
+from monetate_caching.cache import invalidation_context
 import monetate.retailer.models as retailer_models
 from monetate.market.models import Market, MarketAccount
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator

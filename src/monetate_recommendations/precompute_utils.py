@@ -8,7 +8,7 @@ import bisect
 import six
 from copy import deepcopy
 from sqlalchemy.sql import text
-from monetate.common import log, job_timing
+from monetate_monitoring import log
 from monetate.common.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate.common.sqlalchemy_session import CLUSTER_MAX

@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.core.exceptions import MultipleObjectsReturned
 from django.db.models import Q
 from django.utils import timezone
-from monetate.common import log
+from monetate_monitoring import log
 import monetate.recs.models as recs_models
 import monetate.recs.precompute_constants as precompute_constants
 import monetate.retailer.models as retailer_models

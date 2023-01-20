@@ -13,8 +13,8 @@ def patch_invalidations(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        with mock.patch('monetate.retailer.cache.invalidation_context', autospec=True), \
-             mock.patch('monetate.retailer.cache.enqueue_invalidations', autospec=True), \
+        with mock.patch('monetate_caching.cache.invalidation_context', autospec=True), \
+             mock.patch('monetate_caching.cache.enqueue_invalidations', autospec=True), \
              mock.patch('monetate.retailer.models.invalidate_bucket', autospec=True):
             return func(*args, **kwargs)
 

@@ -22,7 +22,7 @@ import traceback
 
 from django.utils import timezone
 from django.db.models import Q
-from monetate.common import log
+from monetate_monitoring import log
 from monetate.recs.models import RecommendationsPrecompute, PrecomputeQueue
 import monetate.recs.precompute_constants as precompute_constants
 import precompute_algo_map as precompute_algo_map

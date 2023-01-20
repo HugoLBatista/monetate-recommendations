@@ -1,6 +1,6 @@
 from sqlalchemy.sql import text
 import precompute_utils
-from monetate.common import log, job_timing
+from monetate_monitoring import log
 import monetate.retailer.models as retailer_models
 
 
