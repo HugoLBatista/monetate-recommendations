@@ -3,7 +3,8 @@ import contextlib
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
-from monetate.common import job_timing, log
+from monetate_monitoring import log
+from monetate.common import job_timing
 from monetate_recommendations import precompute_utils
 
 log.configure_script_log('precompute_trending_algorithm')

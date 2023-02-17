@@ -6,7 +6,7 @@ from django.db.models import Q
 from . import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCaseWithData
-from monetate.retailer.cache import invalidation_context
+from monetate_caching.cache import invalidation_context
 import monetate.recs.models as recs_models
 import monetate.dio.models as dio_models
 

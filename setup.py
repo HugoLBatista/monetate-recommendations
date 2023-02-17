@@ -33,13 +33,15 @@ setup(
         "django-json-rpc",
         "djangorestframework<=3.9.0",  # last version which supports both py2 and py3
         "monetate-bandit",
-        "monetate-recs<=1.3.5",
+        "monetate-recs<=1.3.6",
+        "monetate-monitoring",
+        "monetate-caching",
         "aws-encryption-sdk",
         "beautifulsoup4<=4.9.3",  # The final version of Beautiful Soup to support Python 2 was 4.9.3
         "cachetools<=3.1.1",  # last version which supports both py2 and py3
         "Cerberus",
         "certifi<2021.0.0",  # is required by snowflake-connector-python
-        "ciso8601",
+        "ciso8601<=2.2.0",  # later versions stopped supporting py2
         "decorator<=4.1.2",  # last version which supports both py2 and py3
         "FormEncode",
         "idna<2.9",  # is required by snowflake-connector-python, requests
