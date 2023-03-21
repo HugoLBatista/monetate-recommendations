@@ -36,6 +36,7 @@ setup(
         "monetate-recs<=1.3.6",
         "monetate-monitoring",
         "monetate-caching",
+        "monetate-profile",
         "aws-encryption-sdk",
         "beautifulsoup4<=4.9.3",  # The final version of Beautiful Soup to support Python 2 was 4.9.3
         "cachetools<=3.1.1",  # last version which supports both py2 and py3

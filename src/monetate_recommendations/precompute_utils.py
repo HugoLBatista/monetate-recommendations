@@ -11,7 +11,7 @@ from sqlalchemy.sql import text
 from monetate_monitoring import log
 from monetate.common.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
-from monetate.common.sqlalchemy_session import CLUSTER_MAX
+from monetate_profile.sqlalchemy_session import CLUSTER_MAX
 import monetate.retailer.models as retailer_models
 import monetate.dio.models as dio_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
