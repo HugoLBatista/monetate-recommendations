@@ -322,7 +322,7 @@ WITH
         SELECT recommendation.item_group_id, max(recommendation.id) as id, recommendation.color, recommendation.image_link {recommendation_attributes}
         FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
         JOIN filtered_catalog recommendation
-        ON pid_algo.lookup_key = recommendation.item_group_id
+        ON pid_algo.product_id = recommendation.item_group_id
         {recommendation_attributes_group_by}
     ),
     sku_algo AS (

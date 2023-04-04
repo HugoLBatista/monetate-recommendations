@@ -236,6 +236,7 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00003(SKU-00003): 3
         # TP-00004(SKU-00004): 1
         filter_json = json.dumps({"type": "and", "filters": []})
+        pushdown_filter_json_arr = [u'{"_country_code":"ca","product_type":""}', u'{"_country_code":"us","product_type":""}']
         self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result_arr=[
             [
                 ('SKU-00005', 1, "CA"),
@@ -251,7 +252,7 @@ class PurchaseCountTestCase(RecsTestCase):
         ], geo_target="country", pushdown_filter_hashes=[
             hashlib.sha1(six.ensure_binary('product_type=/country_code=CA'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=/country_code=US'.lower())).hexdigest(),
-        ], purchase_data_source="online")
+        ], purchase_data_source="online", pushdown_filter_json_arr=pushdown_filter_json_arr)
 
     def test_purchase_with_region_geo_30_days(self):
         # 30-day totals:
@@ -266,6 +267,8 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00003(SKU-00003): 3
         # TP-00004(SKU-00004): 1
         filter_json = json.dumps({"type": "and", "filters": []})
+        pushdown_filter_json_arr = [u'{"_country_code":"ca","_region":"on","product_type":""}', 
+        u'{"_country_code":"us","_region":"nj","product_type":""}', u'{"_country_code":"us","_region":"pa","product_type":""}']
         self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result_arr=[
             [
                 ('SKU-00005', 1, "CA", "ON"),
@@ -285,7 +288,7 @@ class PurchaseCountTestCase(RecsTestCase):
             hashlib.sha1(six.ensure_binary('product_type=/country_code=CA/region=ON'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=/country_code=US/region=NJ'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=/country_code=US/region=PA'.lower())).hexdigest(),
-        ], purchase_data_source="online")
+        ], purchase_data_source="online", pushdown_filter_json_arr=pushdown_filter_json_arr)
 
     def test_purchase_filter(self):
         # 7-day totals:

@@ -258,6 +258,8 @@ class MostViewedTestCase(RecsTestCase):
                 }
             }]
         })
+        pushdown_filter_json_arr = [u'{"product_type":""}', u'{"product_type":"clothing > jeans"}',
+         u'{"product_type":"clothing > pants"}', u'{"product_type":"test"}']
         self._run_recs_test(algorithm="view", lookback=30, filter_json=filter_json, expected_result_arr=[
             [  # product_type=""
                 ('SKU-00002', 1),
@@ -282,7 +284,7 @@ class MostViewedTestCase(RecsTestCase):
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Pants'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=test'.lower())).hexdigest(),
-        ], purchase_data_source="online")
+        ], purchase_data_source="online", pushdown_filter_json_arr=pushdown_filter_json_arr)
 
     def test_view_retailer_scope(self):
         # 7-day totals:
