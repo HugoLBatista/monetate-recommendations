@@ -315,6 +315,21 @@ class PurchaseValueTestCase(RecsTestCase):
                 }
             }]
         })
+        
+        pushdown_filter_json_arr = [
+            u'{"_country_code":"ca","_region":"on","product_type":""}',
+            u'{"_country_code":"ca","_region":"on","product_type":"clothing > jeans"}',
+            u'{"_country_code":"ca","_region":"on","product_type":"clothing > pants"}', 
+            u'{"_country_code":"ca","_region":"on","product_type":"test"}', 
+            u'{"_country_code":"us","_region":"nj","product_type":""}',
+            u'{"_country_code":"us","_region":"nj","product_type":"clothing > jeans"}', 
+            u'{"_country_code":"us","_region":"nj","product_type":"test"}',
+            u'{"_country_code":"us","_region":"pa","product_type":""}', 
+            u'{"_country_code":"us","_region":"pa","product_type":"clothing > jeans"}', 
+            u'{"_country_code":"us","_region":"pa","product_type":"clothing > pants"}', 
+            u'{"_country_code":"us","_region":"pa","product_type":"test"}',
+        ]
+
         self._run_recs_test(algorithm="purchase_value", lookback=7, filter_json=filter_json, expected_result_arr=[
             [  # product_type=""
                 ('SKU-00003', 1, 'CA', 'ON'),
@@ -363,7 +378,7 @@ class PurchaseValueTestCase(RecsTestCase):
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Jeans/country_code=US/region=PA'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=Clothing > Pants/country_code=US/region=PA'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=test/country_code=US/region=PA'.lower())).hexdigest(),
-        ], purchase_data_source="online")
+        ], purchase_data_source="online", pushdown_filter_json_arr=pushdown_filter_json_arr)
 
     def test_purchase_retailer_scope(self):
         # 7-day totals:

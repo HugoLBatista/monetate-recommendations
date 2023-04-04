@@ -102,8 +102,15 @@ class RecsTestCase(SnowflakeTestCase):
                 status='dev',
                 description=''
             )
+            retailer_models.AccountFeatureFlag.objects.get_or_create(
+                name=retailer_models.ACCOUNT_FEATURES.UNIFIED_PRECOMPUTE,
+                category=feature_category,
+                status='dev',
+                description=''
+            )
             cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_NONCOLLAB_RECS_PRECOMPUTE)
             cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.ENABLE_COLLAB_RECS_PRECOMPUTE_MODELING)
+            cls.account.add_feature(retailer_models.ACCOUNT_FEATURES.UNIFIED_PRECOMPUTE)
         cls.account_id = cls.account.id
         cls.retailer_id = cls.account.retailer.id
         cls.product_catalog_id = warehouse_utils.create_default_catalog_schema(cls.account).schema_id
@@ -174,14 +181,15 @@ class RecsTestCase(SnowflakeTestCase):
             (21, 5, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
             (22, 6, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
             (23, 7, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
-            (24, 8, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30))
+            (24, 8, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30)),
+            (25, 9, cutoff_time - timedelta(days=365), cutoff_time + timedelta(minutes=30))
         )
         # make_row_list((cls.conn.execute("select dataset_id from config_dataset_data_expiration")))
 
     @patch_invalidations
     def _run_recs_test(self, algorithm, lookback, filter_json, expected_result=None, expected_result_arr=None,
                        geo_target="none", pushdown_filter_hashes=None, retailer_market_scope=None, market=None,
-                       purchase_data_source="online"):
+                       purchase_data_source="online", pushdown_filter_json_arr=None):
         # Insert row into config to mock out a lookback setting
         old_rec_setting = recs_models.AccountRecommendationSetting.objects.filter(account=self.account)
         if old_rec_setting:
@@ -239,18 +247,24 @@ class RecsTestCase(SnowflakeTestCase):
         actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_url)]
         actual_results_2 = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(new_s3_url)]
 
-        self._run_assertions(expected_results, actual_results, pushdown_filter_hashes, recset, unload_type="old")
-        self._run_assertions(expected_results, actual_results_2, pushdown_filter_hashes, recset, unload_type="new")
+        self._run_assertions(expected_results, actual_results, pushdown_filter_hashes, recset, pushdown_filter_json_arr,unload_type="old")
+        self._run_assertions(expected_results, actual_results_2, pushdown_filter_hashes, recset, pushdown_filter_json_arr, unload_type="new")
 
-    def _run_assertions(self, expected_results, actual_results, pushdown_filter_hashes, recset, unload_type):
+    def _run_assertions(self, expected_results, actual_results, pushdown_filter_hashes, recset, pushdown_filter_json_arr, unload_type):
         self.assertEqual(len(actual_results), len(expected_results))
         for result_line in range(0, len(expected_results)):
             expected_result = expected_results[result_line]
             expected_feed_type = 'RECSET_NONCOLLAB_RECS' if unload_type == "old" else "RECSET_RECS"
             # lookup actual_result by pushdown_filter_hash if included otherwise assume results are in order
-            actual_result = [result for result in actual_results if
-                             result['document']['pushdown_filter_hash'] == pushdown_filter_hashes[result_line]][0] \
-                if pushdown_filter_hashes else actual_results[result_line]
+            if unload_type == "old":
+                actual_result = [result for result in actual_results if
+                                result['document']['pushdown_filter_hash'] == pushdown_filter_hashes[result_line]][0] \
+                    if pushdown_filter_hashes else actual_results[result_line]
+            else:
+                actual_result = [result for result in actual_results if
+                                result['document']['pushdown_filter_json'] == pushdown_filter_json_arr[result_line]][0] \
+                    if pushdown_filter_json_arr else actual_results[result_line]
+
             # equal number product records vs expected
             self.assertEqual(len(actual_result['document']['data']), len(expected_result))
             self.assertEqual(actual_result['account']['id'], recset.account.id)
@@ -516,7 +530,7 @@ class RecsTestCaseWithData(RecsTestCase):
         for index, recset in enumerate(recsets):
             expected_result_arr = expected_results[recset.id]
             actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index])]
-            self.assertEqual(len(expected_result_arr), len(actual_results))
+            self.assertEqual(len(expected_result_arr), len(actual_results), "expected: {}\n actual: {}\n".format(expected_result_arr, actual_results))
             for i, item in enumerate(expected_result_arr):
                 actual_result = actual_results[i]
                 if recset.account:

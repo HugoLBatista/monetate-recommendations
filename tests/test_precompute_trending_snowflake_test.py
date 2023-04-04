@@ -203,6 +203,7 @@ class TrendingTestCase(RecsTestCase):
         # TP-00005(SKU-00005/SKU-00006): 7/10
         # TP-00004(SKU-00004): 5/20
         filter_json = json.dumps({"type": "and", "filters": []})
+        pushdown_filter_json_arr = [u'{"_country_code":"ca","product_type":""}', u'{"_country_code":"us","product_type":""}']
         self._run_recs_test(algorithm="trending", lookback=7, filter_json=filter_json, expected_result_arr=[
             [
                 ('SKU-00005', 1, "CA"),
@@ -213,7 +214,7 @@ class TrendingTestCase(RecsTestCase):
         ], geo_target="country", pushdown_filter_hashes=[
             hashlib.sha1(six.ensure_binary('product_type=/country_code=CA'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=/country_code=US'.lower())).hexdigest(),
-        ], purchase_data_source="online")
+        ], purchase_data_source="online", pushdown_filter_json_arr=pushdown_filter_json_arr)
 
     def test_trending_with_region(self):
         # 7-day totals:
@@ -229,6 +230,7 @@ class TrendingTestCase(RecsTestCase):
         # TP-00005(SKU-00005/SKU-00006): 7/10
         # TP-00004(SKU-00004): 5/20
         filter_json = json.dumps({"type": "and", "filters": []})
+        pushdown_filter_json_arr = [u'{"_country_code":"ca","_region":"on","product_type":""}', u'{"_country_code":"us","_region":"pa","product_type":""}']
         self._run_recs_test(algorithm="trending", lookback=7, filter_json=filter_json, expected_result_arr=[
             [
                 ('SKU-00005', 1, "CA", "ON"),
@@ -239,7 +241,7 @@ class TrendingTestCase(RecsTestCase):
         ], geo_target="region", pushdown_filter_hashes=[
             hashlib.sha1(six.ensure_binary('product_type=/country_code=CA/region=ON'.lower())).hexdigest(),
             hashlib.sha1(six.ensure_binary('product_type=/country_code=US/region=PA'.lower())).hexdigest(),
-        ], purchase_data_source="online")
+        ], purchase_data_source="online", pushdown_filter_json_arr=pushdown_filter_json_arr)
 
     def test_trending_filter(self):
         # 7-day totals:
