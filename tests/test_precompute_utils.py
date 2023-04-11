@@ -436,7 +436,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        static_filter, dynamic_filter, has_hashable_dynamic_product_type_filter = precompute_utils.parse_collab_filters(filter_json, catalog_fields)
+        static_filter, dynamic_filter = precompute_utils.parse_collab_filters(filter_json, catalog_fields)
         expected_static = {
             "type": "and",
             "filters": [{
@@ -526,7 +526,7 @@ class PrecomputeUtilsTestCase(TestCase):
                 'data_type': 'string'
             }
         ]
-        static_filter, dynamic_filter, has_hashable_dynamic_product_type_filter = precompute_utils.parse_collab_filters(filter_json, catalog_fields)
+        static_filter, dynamic_filter = precompute_utils.parse_collab_filters(filter_json, catalog_fields)
         expected_static = {
             "type": "and",
             "filters": [{
@@ -553,19 +553,7 @@ class PrecomputeUtilsTestCase(TestCase):
         }
         expected_dynamic = {
             "type": "and",
-            "filters": [
-                        {
-                            "left": {
-                                    "field": "product_type",
-                                    "type": "field"
-                                    },
-                            "right": {
-                                    "type": "function",
-                                    "value": "any_item_in_cart"
-                                    },
-                            "type": "startswith"
-                        }
-                    ]
-                }
+            "filters": []
+        }
         self.assertEqual(static_filter, expected_static)
         self.assertEqual(dynamic_filter, expected_dynamic)

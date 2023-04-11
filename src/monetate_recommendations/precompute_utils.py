@@ -20,7 +20,8 @@ from monetate_recommendations import supported_prefilter_expression_v2 as filter
 from monetate_recommendations import supported_prefilter_expression_v3 as new_filters
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, DATA_TYPE_TO_SNOWFLAKE_TYPE
 from .supported_prefilter_expression_v3 import FILTER_MAP
-import precompute_purchase_associated_pids
+from monetate_recommendations import precompute_purchase_associated_pids
+from .precompute_purchase_associated_pids import get_dataset_ids_for_pos, GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -122,39 +123,6 @@ FROM (
 FILE_FORMAT = (TYPE = JSON, compression='gzip')
 SINGLE=TRUE
 MAX_FILE_SIZE=1000000000
-"""
-
-SNOWFLAKE_UNLOAD_COLLAB_2 = """
-COPY
-INTO :target
-FROM (
-    SELECT object_construct(
-        'shard_key', :shard_key,
-        'document', object_construct(
-            'pushdown_filter_hash', sha1(LOWER(TO_JSON(object_construct({pushdown_filter_str})))),
-            'lookup_key', lookup_key,
-            'pushdown_filter_json', LOWER(TO_JSON(object_construct({pushdown_filter_str}))),
-            'data', (
-                array_agg(object_construct('id', id, 'normalized_score', normalized_score, 'rank', rank))
-                WITHIN GROUP (ORDER BY rank ASC)
-            )
-        ),
-        'sent_time', :sent_time,
-        'account', object_construct(
-            'id', :account_id
-        ),
-        'schema', object_construct(
-            'feed_type', 'RECSET_RECS',
-            'id', :recset_id
-        )
-    )
-    FROM scratch.recset_{account_id}_{recset_id}_ranks
-    GROUP BY {group_by}
-)
-FILE_FORMAT = (TYPE = JSON, compression='gzip')
-SINGLE=TRUE
-MAX_FILE_SIZE=1000000000
-
 """
 SNOWFLAKE_UNLOAD_PID_PID = """
 COPY 
@@ -328,45 +296,6 @@ score_scaling AS (
         )
 JOIN score_scaling"""
 
-COLLAB_STATIC_FILTER_RANKS = """
-SELECT
-        lookup_key,
-        id,
-        ordinal AS rank,
-        normalized_score
-    FROM (
-        SELECT
-            lookup_key,
-            id,
-            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal,
-            normalized_score
-        FROM sku_algo
-    )
-    WHERE rank <= 50
-"""
-
-COLLAB_DYNAMIC_FILTER_RANKS = """
-SELECT
-        lookup_key,
-        id,
-        ordinal AS rank,
-        normalized_score,
-        product_type,
-        split_product_type
-    FROM (
-        SELECT
-            lookup_key,
-            id,
-            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal,
-            normalized_score,
-            product_type,
-            TRIM(split_product_type.value::string, ' ') as split_product_type
-        FROM sku_algo as sa, 
-        LATERAL FLATTEN(input=>split(sa.product_type, ',')) split_product_type
-    )
-    WHERE rank <= 50
-"""
-
 SKU_RANKS_BY_COLLAB_RECSET = """
 CREATE TEMPORARY TABLE scratch.recset_{account_id}_{recset_id}_ranks AS
 WITH
@@ -403,14 +332,26 @@ WITH
             max(recommendation.id) as id,
             pid_algo.score,
             pid_algo.normalized_score
-            {should_sku_ranks_select_product_type}
          FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
          JOIN recommendation_item_attributes recommendation
             ON pid_algo.product_id = recommendation.item_group_id 
             {dynamic_filter}
-        GROUP BY 1,3,4,recommendation.color,recommendation.image_link {should_sku_ranks_group_by_product_type}
+        GROUP BY 1,3,4,recommendation.color,recommendation.image_link
     )
-    {rank_query}
+    SELECT
+        lookup_key,
+        id,
+        ordinal AS rank,
+        normalized_score
+    FROM (
+        SELECT
+            lookup_key,
+            id,
+            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal,
+            normalized_score
+        FROM sku_algo
+    )
+    WHERE rank <= 50
 """
 
 
@@ -440,11 +381,10 @@ def parse_supported_filters(filter_dict, catalog_fields, algo_type):
 
     # a filter is supported if:
     #   1. true from _filter_supporterd_filters
-    #   2. is a static or dynamic function items_from_base_recommendation_on or a product_type
+    #   2. is a static or dynamic function items_from_base_recommendation_on
     def _filter_collab_supported_filters(f):
         return _filter_supported_filters(f) and (
-                f['right']['type'] != 'function' or f['right']['value'] == 'items_from_base_recommendation_on'
-                or f['left']['field'] == 'product_type') 
+                f['right']['type'] != 'function' or f['right']['value'] == 'items_from_base_recommendation_on')
 
     if algo_type == 'collaborative':
         supported_filters = list(filter(_filter_collab_supported_filters, filter_dict['filters']))
@@ -496,11 +436,7 @@ def parse_collab_filters(filter_json, catalog_fields):
     static_supported_filters['filters'] = [f for f in supported_filters if f['right']['type'] != 'function']
     dynamic_supporterd_filter['filters'] = [f for f in supported_filters if f['right']['type'] == 'function']
 
-    product_type_filters = [f for f in supported_filters if f['left']['field'] == 'product_type']
-    has_hashable_dynamic_product_type_filter = len([f for f in product_type_filters if f['right']['type'] == 'function' and 
-                                                    f['right']['value'] != 'items_from_base_recommendation_on']) > 0
-
-    return static_supported_filters, dynamic_supporterd_filter, has_hashable_dynamic_product_type_filter
+    return static_supported_filters, dynamic_supporterd_filter
 
 
 def collab_dynamic_filter_query(recset_dynamic_filter, global_dynamic_filter, catalog_fields):
@@ -544,14 +480,14 @@ def get_item_attributes_from_filtered_catalog(recset_dynamic_filter, global_dyna
 
 def get_static_and_dynamic_filter(recset_filter, global_filter, catalog_fields):
 
-    recset_static_filter, recset_dynamic_filter, recset_has_hashable_dynamic_product_type_filter = parse_collab_filters(recset_filter, catalog_fields)
-    global_static_filter, global_dynamic_filter, global_has_hashable_dynamic_product_type_filter = parse_collab_filters(global_filter, catalog_fields)
+    recset_static_filter, recset_dynamic_filter = parse_collab_filters(recset_filter, catalog_fields)
+    global_static_filter, global_dynamic_filter = parse_collab_filters(global_filter, catalog_fields)
     dynamic_filter_sql = collab_dynamic_filter_query(recset_dynamic_filter,global_dynamic_filter, catalog_fields)
     static_filter_sql, static_filter_variables = new_filters.get_query_and_variables_collab(recset_static_filter,
                                            global_static_filter, catalog_fields)
     context_attributes, recommendation_attributes, recommendation_attributes_group_by = get_item_attributes_from_filtered_catalog(recset_dynamic_filter, global_dynamic_filter, catalog_fields)
-    has_hashable_dynamic_product_type_filter = recset_has_hashable_dynamic_product_type_filter or global_has_hashable_dynamic_product_type_filter
-    return ('WHERE ' + static_filter_sql), static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_attributes_group_by, has_hashable_dynamic_product_type_filter
+    return ('WHERE ' + static_filter_sql), static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_attributes_group_by
+
 
 def get_fact_time(lookback):
     begin_fact_time = datetime.datetime.today().replace(
@@ -649,7 +585,7 @@ def get_unload_sql(geo_target, has_dynamic_filter):
         'rank_query': rank_query.format(partition_by=partition_by)
     }
 
-def get_pushdown_filter_json(unload_sql_params, geo_target=None):
+def get_pushdown_filter_json(unload_sql_params, geo_target):
     pushdown_filter_json = {'product_type':unload_sql_params['dynamic_product_type']}
     geo_cols = GEO_TARGET_COLUMNS.get(geo_target, [])
 
@@ -1034,16 +970,8 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
 
             # pass the algorithm into get_static_and_dynamic_filter and return algo_filter_sql
             # along with the other filter sql
-            static_filter_sql, static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_attributes_group_by, has_hashable_dynamic_product_type_filter = get_static_and_dynamic_filter(
+            static_filter_sql, static_filter_variables, dynamic_filter_sql, context_attributes, recommendation_attributes, recommendation_attributes_group_by = get_static_and_dynamic_filter(
                 final_filter_json, global_filter_json, catalog_fields)
-            dynamic_product_type = "split_product_type" if has_hashable_dynamic_product_type_filter else "''"
-            pushdown_filter_json = get_pushdown_filter_json({'dynamic_product_type': dynamic_product_type}, None)
-            pushdown_filter_str = get_pushdown_filter_str(pushdown_filter_json)
-            group_by = 'lookup_key, split_product_type' if has_hashable_dynamic_product_type_filter else 'lookup_key'
-            collab_rank_query = COLLAB_DYNAMIC_FILTER_RANKS if has_hashable_dynamic_product_type_filter else COLLAB_STATIC_FILTER_RANKS
-            
-            should_sku_ranks_select_product_type = ', recommendation.product_type as product_type' if has_hashable_dynamic_product_type_filter else ''
-            should_sku_ranks_group_by_product_type = ', recommendation.product_type' if has_hashable_dynamic_product_type_filter else ''
             # this query explodes the pid to sku to create a pid-sku relation
             conn.execute(text(SKU_RANKS_BY_COLLAB_RECSET.format(algorithm=recset.algorithm, recset_id=recset.id,
                                                                 account_id=account_id.id,
@@ -1055,10 +983,7 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
                                                                 static_filter=static_filter_sql,
                                                                 context_attributes=context_attributes,
                                                                 recommendation_attributes=recommendation_attributes,
-                                                                recommendation_attributes_group_by=recommendation_attributes_group_by,
-                                                                rank_query = collab_rank_query,
-                                                                should_sku_ranks_select_product_type=should_sku_ranks_select_product_type,
-                                                                should_sku_ranks_group_by_product_type=should_sku_ranks_group_by_product_type
+                                                                recommendation_attributes_group_by=recommendation_attributes_group_by
                                                                 )),
                          retailer_id=recset.retailer.id,
                          catalog_dataset_id=catalog_id,
@@ -1074,17 +999,6 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
                          recset_id=recset.id,
                          sent_time=send_time,
                          target=unload_path)
-            # Unload to new path only if feature flag is enabled.
-            precompute_feature = retailer_models.ACCOUNT_FEATURES.UNIFIED_PRECOMPUTE
-            account_obj = retailer_models.Account.objects.get(id=account_id.id)
-            if account_obj.has_feature(precompute_feature):
-                conn.execute(text(SNOWFLAKE_UNLOAD_COLLAB_2.format(recset_id=recset.id, account_id=account_id.id,
-                pushdown_filter_str=pushdown_filter_str, group_by=group_by)),
-                            shard_key=get_shard_key(account_id.id),
-                            account_id=account_id.id,
-                            recset_id=recset.id,
-                            sent_time=send_time,
-                            target=new_unload_path)
             log.log_info("Finished processing recset id {}, number of rows {} and file path {}".format(
                 recset.id, result_counts[-1], unload_path))
 
