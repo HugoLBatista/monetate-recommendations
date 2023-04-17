@@ -20,7 +20,7 @@ from monetate_recommendations import supported_prefilter_expression_v2 as filter
 from monetate_recommendations import supported_prefilter_expression_v3 as new_filters
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, DATA_TYPE_TO_SNOWFLAKE_TYPE
 from .supported_prefilter_expression_v3 import FILTER_MAP
-from .import precompute_purchase_associated_pids
+import precompute_purchase_associated_pids
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -362,7 +362,7 @@ SELECT
             product_type,
             TRIM(split_product_type.value::string, ' ') as split_product_type
         FROM sku_algo as sa, 
-        LATERAL FLATTEN(input=>split(sa.product_type, ',')) split_product_type
+        LATERAL FLATTEN(input=>ARRAY_APPEND(parse_csv_string_udf(sa.product_type), '')) split_product_type
     )
     WHERE rank <= 50
 """
