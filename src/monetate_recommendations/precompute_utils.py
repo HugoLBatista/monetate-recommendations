@@ -338,7 +338,7 @@ SELECT
         SELECT
             lookup_key,
             id,
-            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal,
+            ROW_NUMBER() OVER ({partition_by} ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal,
             normalized_score
         FROM sku_algo
     )
@@ -357,10 +357,10 @@ SELECT
         SELECT
             lookup_key,
             id,
-            ROW_NUMBER() OVER (PARTITION by lookup_key ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal,
             normalized_score,
             product_type,
-            TRIM(split_product_type.value::string, ' ') as split_product_type
+            TRIM(split_product_type.value::string, ' ') as split_product_type,
+            ROW_NUMBER() OVER ({partition_by} ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal
         FROM sku_algo as sa, 
         LATERAL FLATTEN(input=>ARRAY_APPEND(parse_csv_string_udf(sa.product_type), '')) split_product_type
     )
@@ -1043,6 +1043,7 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
             pushdown_filter_str = get_pushdown_filter_str(pushdown_filter_json)
             group_by = 'lookup_key, split_product_type' if has_hashable_dynamic_product_type_filter else 'lookup_key'
             collab_rank_query = COLLAB_DYNAMIC_FILTER_RANKS if has_hashable_dynamic_product_type_filter else COLLAB_STATIC_FILTER_RANKS
+            partition_by = "PARTITION by lookup_key, " + dynamic_product_type if has_hashable_dynamic_product_type_filter else "PARTITION by lookup_key "
 
             should_sku_ranks_select_product_type = ', recommendation.product_type as product_type' if has_hashable_dynamic_product_type_filter else ''
             should_sku_ranks_group_by_product_type = ', recommendation.product_type' if has_hashable_dynamic_product_type_filter else ''
@@ -1058,7 +1059,7 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
                                                                 context_attributes=context_attributes,
                                                                 recommendation_attributes=recommendation_attributes,
                                                                 recommendation_attributes_group_by=recommendation_attributes_group_by,
-                                                                rank_query=collab_rank_query,
+                                                                rank_query=collab_rank_query.format(partition_by=partition_by),
                                                                 should_sku_ranks_select_product_type=should_sku_ranks_select_product_type,
                                                                 should_sku_ranks_group_by_product_type=should_sku_ranks_group_by_product_type
                                                                 )),
