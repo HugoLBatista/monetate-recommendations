@@ -486,7 +486,8 @@ class RecsTestCaseWithData(RecsTestCase):
         for recset in recsets:
             unload_path, new_unload_path, sent_time = precompute_utils.create_unload_target_path(self.account.id, recset.id)
             unload_result.append((unload_path, new_unload_path, sent_time))
-            s3_urls.append(get_stage_s3_uri_prefix(self.conn, unload_path))
+            stage_s3_uris = (get_stage_s3_uri_prefix(self.conn, unload_path), get_stage_s3_uri_prefix(self.conn, new_unload_path))
+            s3_urls.append(stage_s3_uris)
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
                 mock.patch('monetate_recommendations.precompute_purchase_associated_pids.get_dataset_ids_for_pos') \
                             as mock_pos_datasets, \
@@ -529,10 +530,12 @@ class RecsTestCaseWithData(RecsTestCase):
         # test pid-sku (per recset)
         for index, recset in enumerate(recsets):
             expected_result_arr = expected_results[recset.id]
-            actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index])]
+            actual_results = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index][0])]
+            actual_results_2 = [json.loads(line.strip()) for line in s3_filereader2.read_s3_gz(s3_urls[index][1])]
             self.assertEqual(len(expected_result_arr), len(actual_results), "expected: {}\n actual: {}\n".format(expected_result_arr, actual_results))
             for i, item in enumerate(expected_result_arr):
                 actual_result = actual_results[i]
+                actual_result_2 = actual_results_2[i]
                 if recset.account:
                     self.assertEqual(actual_result['account']['id'], recset.account.id)
                 self.assertEqual(actual_result['schema']['feed_type'], 'RECSET_COLLAB_RECS', "\nExpected context item {}\n"
@@ -541,12 +544,29 @@ class RecsTestCaseWithData(RecsTestCase):
                                             "Actual recs are: {}".format(item[0], item[1],
                                                                  actual_result['document']['lookup_key'],
                                                                  actual_result['document']['data']))
+
+                # New unload path
+                self.assertEqual(actual_result_2['schema']['feed_type'], 'RECSET_RECS', "\nExpected context item {}\n"
+                                           "Expected recs is: {} \n"
+                                            "Actual rec context item is {} \n"
+                                            "Actual recs are: {}".format(item[0], item[1],
+                                                                 actual_result_2['document']['lookup_key'],
+                                                                 actual_result_2['document']['data']))
+
                 self.assertEqual(len(actual_result['document']['data']), len(item[1]), "\nExpected context item {}\n"
                                             "Expected recs is: {} \n"
                                             "Actual rec context item is {} \n"
                                             "Actual recs are: {}".format(item[0], item[1],
                                                                  actual_result['document']['lookup_key'],
                                                                  actual_result['document']['data']))
+                # New unload path
+                self.assertEqual(len(actual_result_2['document']['data']), len(item[1]), "\nExpected context item {}\n"
+                            "Expected recs is: {} \n"
+                            "Actual rec context item is {} \n"
+                            "Actual recs are: {}".format(item[0], item[1],
+                                                    actual_result_2['document']['lookup_key'],
+                                                    actual_result_2['document']['data']))
+
                 self.assertEqual(actual_result['document']['lookup_key'], item[0], "\nExpected context item {}\n"
                                             "Expected recs is: {} \n"
                                             "Actual rec context item is {} \n"
@@ -554,13 +574,23 @@ class RecsTestCaseWithData(RecsTestCase):
                                                                  actual_result['document']['lookup_key'],
                                                                  actual_result['document']['data']))
 
+                # New unload path
+                self.assertEqual(actual_result_2['document']['lookup_key'], item[0], "\nExpected context item {}\n"
+                                            "Expected recs is: {} \n"
+                                            "Actual rec context item is {} \n"
+                                            "Actual recs are: {}".format(item[0], item[1],
+                                                                 actual_result_2['document']['lookup_key'],
+                                                                 actual_result_2['document']['data']))
+
                 data = actual_result['document']['data']
-                for i, row in enumerate(item[1]):
-                    self.assertEqual(row[0], data[i]['id'], "\nExpected context item {}\n"
-                                                            "Actual rec context item is {} \n"
-                                                            "Actual recs returned is: {}".format(item[0],
-                                                                actual_result['document']['lookup_key'], data))
-                    self.assertEqual(row[1], data[i]['rank'], "\nTest failed on context item {}\n"
-                                            "Actual recs returned is: {}".format(item[0], data))
+                results = (actual_result['document']['data'], actual_result_2['document']['data'])
+                for data in results:
+                    for i, row in enumerate(item[1]):
+                        self.assertEqual(row[0], data[i]['id'], "\nExpected context item {}\n"
+                                                                "Actual rec context item is {} \n"
+                                                                "Actual recs returned is: {}".format(item[0],
+                                                                    actual_result['document']['lookup_key'], data))
+                        self.assertEqual(row[1], data[i]['rank'], "\nTest failed on context item {}\n"
+                                                "Actual recs returned is: {}".format(item[0], data))
 
 
