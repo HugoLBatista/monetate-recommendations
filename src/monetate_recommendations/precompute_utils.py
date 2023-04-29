@@ -18,6 +18,7 @@ from monetate.recs.models import RecommendationSet, RecommendationSetDataset, Ac
 from monetate_recommendations import supported_prefilter_expression
 from monetate_recommendations import supported_prefilter_expression_v2 as filters
 from monetate_recommendations import supported_prefilter_expression_v3 as new_filters
+from .active import is_strategy_active
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, DATA_TYPE_TO_SNOWFLAKE_TYPE
 from .supported_prefilter_expression_v3 import FILTER_MAP
 import precompute_purchase_associated_pids
@@ -1010,6 +1011,9 @@ def process_collab_recsets(conn, queue_entry, account, market, retailer):
     result_counts = []
     recsets = get_recset_ids(queue_entry)
     for recset in recsets:
+        if not is_strategy_active(recset):
+            log.log_info('skip inactive strategy {}'.format(recset.id))
+            continue
         account_ids = get_account_ids_for_catalog_join_and_output(recset, queue_entry.account)
         for account_id in account_ids:
             log.log_info("Processing recset id {}, account id {} for queue entry {}"
