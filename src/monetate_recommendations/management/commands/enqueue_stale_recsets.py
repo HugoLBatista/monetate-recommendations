@@ -7,6 +7,7 @@ from monetate_monitoring import log
 import monetate.recs.models as recs_models
 import monetate.recs.precompute_constants as precompute_constants
 import monetate.retailer.models as retailer_models
+from monetate_recommendations.active import is_strategy_active
 
 log.configure_script_log('enqueue_stale_recsets')
 
@@ -69,6 +70,9 @@ class Command(BaseCommand):
         updated_recsets = []
         created_recsets = []
         for recset in precompute_recsets:
+            if not is_strategy_active(recset):
+                log.log_info('skip inactive strategy {}'.format(recset.id))
+                continue
             precompute_recsets_status = recs_models.RecommendationsPrecompute.objects.filter(recset=recset).defer('status_log')
             heartbeat_threshold = 300
             heartbeat_old_time = timezone.now() - datetime.timedelta(seconds=heartbeat_threshold)
@@ -119,6 +123,9 @@ class Command(BaseCommand):
         )
         created_collab_queue_entries = 0
         for recset in precompute_collab_recsets:
+            if not is_strategy_active(recset):
+                log.log_info('skip inactive strategy {}'.format(recset.id))
+                continue
             # if retailer level and not market, need to create a queue entry for each account
             if recset.is_retailer_tenanted and not recset.is_market_or_retailer_driven_ds:
                 account_ids = \
