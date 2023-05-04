@@ -33,7 +33,7 @@ setup(
         "django-json-rpc",
         "djangorestframework<=3.9.0",  # last version which supports both py2 and py3
         "monetate-bandit",
-        "monetate-recs<=1.3.6",
+        "monetate-recs>=1.3.6",  # monetate.retailer.ACCOUNT_FEATURES.UNIFIED_PRECOMPUTE added in 1.3.6
         "monetate-monitoring",
         "monetate-caching",
         "monetate-profile",
