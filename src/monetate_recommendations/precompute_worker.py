@@ -163,8 +163,6 @@ class PrecomputeWorker(object):
         """
         self.log('Looking for new recommendations...')
         recs_qs = self.query_recommendations()
-        if not recs_qs:
-            return
         if not self.claim_recommendation(recs_qs):
             return
         self.log('Claimed rec {}'.format(self.recommendation.id))
