@@ -88,6 +88,7 @@ class Command(BaseCommand):
                     recs_to_exclude
                 ).update(
                     status=precompute_constants.STATUS_PENDING,
+                    status_log='',
                     process_complete=False,
                     products_returned=0,
                     attempts=0,
@@ -146,6 +147,7 @@ class Command(BaseCommand):
             status=precompute_constants.STATUS_PENDING
         ).update(
             status=precompute_constants.STATUS_PENDING,
+            status_log='',
             process_complete=False,
             products_returned=0,
             attempts=0,
