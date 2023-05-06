@@ -43,11 +43,12 @@ JOIN action_action aa ON ri.action_id = aa.id
 JOIN placement_campaignwhere p ON aa.where_id = p.id
 JOIN campaign_campaign c ON p.campaign_id = c.id
 JOIN campaign_campaigngroup cg ON c.campaign_group_id = cg.id
-WHERE ((ri.name IN ('recset_id', 'strategy_id') AND /* single parent row join */ pi.lft = 1) OR
+WHERE ((ri.name IN ('recset_id', 'strategy_id') AND /* single row join */ pi.lft = 1) OR
        (pi.name IN ('rec_set_ids', 'fallback_rec_set_ids') AND /* list children */ ri.lft > pi.lft AND ri.rgt < pi.rgt))
   AND cg.archived = 0
   AND ((cg.last_modified_time > (now() - INTERVAL 30 DAY)) OR
-       (cg.active = 1 AND (cg.end_time IS NULL OR cg.end_time > (now() - INTERVAL 30 DAY))))
+       (cg.active = 1 AND (cg.end_time IS NULL OR cg.end_time > (now() - INTERVAL 30 DAY))) OR
+       (cg.campaign_type = 'email_exp') /* email recommendation experiences are never active */)
   AND recs.id = %s
 """
 
@@ -61,6 +62,7 @@ def is_strategy_active(rs):
     - strategy created or updated in the past 30 days
     - strategy referenced by non archived experience modified in the past 30 days
     - strategy referenced by non archived experience active in past 30 days
+    - strategy referenced by non archived email recommendation experience
 
     The current implementation for 'engagement optimized' compound strategies
     uses a JSON string field instead of a proper join table with referential integrity.
