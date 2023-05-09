@@ -528,8 +528,8 @@ def get_item_attributes_from_filtered_catalog(recset_dynamic_filter, global_dyna
     dynamic_filters = recset_dynamic_filter['filters'] + global_dynamic_filter['filters']
     if dynamic_filters:
         has_custom_attributes = False
-        for each in dynamic_filters:
-            attribute = each["left"]["field"]
+        attributes = {each["left"]["field"] for each in dynamic_filters if each}
+        for attribute in attributes:
             field = "{}".format(attribute)
             if attribute not in SUPPORTED_PREFILTER_FIELDS:
                 has_custom_attributes = True
