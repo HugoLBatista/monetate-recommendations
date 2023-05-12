@@ -5,11 +5,11 @@ import os
 import random
 
 from django.utils import timezone
-import monetate.common.s3_filereader2 as s3_filereader2
+import monetate_s3.s3_filereader2 as s3_filereader2
 from monetate.common.warehouse.sqlalchemy_snowflake import get_stage_s3_uri_prefix
 import monetate.recs.models as recs_models
 from monetate.test.testcases import SnowflakeTestCase
-import monetate.test.warehouse_utils as warehouse_utils
+import warehouse_utils
 from monetate_recommendations import precompute_utils
 from monetate_recommendations.precompute_algo_map import FUNC_MAP
 from monetate_recommendations.precompute_collab_algo_map import initialize_collab_algorithm
@@ -18,19 +18,16 @@ from monetate_caching.cache import invalidation_context
 import monetate.retailer.models as retailer_models
 from monetate.market.models import Market, MarketAccount
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
-
-# Duct tape fix for running test in monetate_recommendations. Normally this would run as part of the
-# SnowflakeTestCase setup, but the snowflake_schema_path is not the same when ran from monetate_recommendations.
-# This path will allow the tables_used variable to successfully create the necessary tables for the test.
-from monetate.test import testcases
-
 from monetate_recommendations.precompute_utils import get_account_ids_for_market_driven_recsets
 from tests import patch_invalidations
 
-testcases.snowflake_schema_path = os.path.join(os.path.abspath(os.path.join(os.getcwd(), '..', '..')), 'ec2-user',
-                                               'monetate-server', 'snowflake', 'tables', 'public')
-testcases.snowflake_functions_schema_path = os.path.join(os.path.abspath(os.path.join(os.getcwd(), '..', '..')), 'ec2-user',
-                                               'monetate-server', 'snowflake', 'functions')
+# Duct tape fix for running SnowflakeTestCase in monetate_recommendations.
+# TODO: Update monetate.test.testcases to check relative paths for both source or package.
+import monetate.test.testcases
+root_dir = os.path.dirname(monetate.__file__)
+monetate.test.testcases.snowflake_schema_path = os.path.join(root_dir, 'snowflake', 'tables', 'public')
+monetate.test.testcases.snowflake_functions_schema_path = os.path.join(root_dir, 'snowflake', 'functions')
+
 catalog_fields = [{'name': 'id', 'data_type': 'STRING'},
                   {'name': 'title', 'data_type': 'STRING'},
                   {'name': 'description', 'data_type': 'STRING'},
@@ -66,6 +63,7 @@ class SimpleQSMock(object):
 simpleQSMock = SimpleQSMock(catalog_fields)
 
 class RecsTestCase(SnowflakeTestCase):
+    fixtures = []
     conn = None  # Calm sonar complaints about missing class member (it's set in superclass)
     tables_used = [
         'config_account',

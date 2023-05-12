@@ -9,7 +9,7 @@ import six
 from copy import deepcopy
 from sqlalchemy.sql import text
 from monetate_monitoring import log
-from monetate.common.row import get_single_value_query
+from monetate_profile.row import get_single_value_query
 from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate_profile.sqlalchemy_session import CLUSTER_MAX
 import monetate.retailer.models as retailer_models

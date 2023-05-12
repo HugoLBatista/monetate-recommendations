@@ -37,45 +37,24 @@ MONETATE_GEOIP_CITY_PATH = '/usr/share/GeoIP/GeoIPCity.dat'
 
 # Application definition
 
+USE_BACKEND_MODELS = True  # restrict predicate models to predicate.Who
+
 INSTALLED_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'monetate.system',
-    'monetate.common',
-    'monetate.user',
-    'monetate.script',
-    'monetate.retailer',
-    'monetate.target',
-    'monetate.campaign',
-    'monetate.dataset',
-    'monetate.test',
-    'monetate.action',
-    'monetate.content',
-    'monetate.creative',
-    'monetate.key',
-    'monetate.location',
-    'monetate.predictive_testing',
-    'monetate.merch',
-    'monetate.placement',
-    'monetate.event',
-    'monetate.segmentation',
-    'monetate.audience',
-    'monetate.idrec',
-    'monetate.predicate',
-    'monetate.reportv3',
-    'monetate.adlink',
-    'monetate.dio',
-    'monetate.recs',
+    'monetate.campaign',  # via target
+    'monetate.dataset',  # via dio
+    'monetate.dio',  # via recs
+    'monetate.market',  # via recs
+    'monetate.predicate',  # via campaign - due to backwards dependency of campaign.CampaignGroup on predicate.Who
+    'monetate.recs',  # via recommendations
+    'monetate.retailer',  # via recs
+    'monetate.script',  # via retailer - due to invalidate script cache on CampaignGroup.save()
+    'monetate.system',  # via retailer
+    'monetate.target',  # via dataset - due to dependency of dataset.DataSetColumn on target.CustomTarget
     'monetate_recommendations',
-    'monetate.schema',
-    'monetate.custom_list',
-    'monetate.market',
-    'monetate.mauth',
-    'monetate.email',
+    # NOTE: monetate.schema must be last installed app.
+    # 'monetate.schema',
 ]
 
 MIDDLEWARE = [

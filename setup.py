@@ -27,65 +27,39 @@ setup(
     author_email='monetate_recommendations-team@monetate.com',
     classifiers=[],
     install_requires=[
-        "chardet<3.1.0,>=3.0.2",  # is required by requests
-        "css-parser",
-        "Django>=1.11,<2.0",
-        "django-json-rpc",
-        "djangorestframework<=3.9.0",  # last version which supports both py2 and py3
-        "monetate-bandit",
-        "monetate-recs>=1.3.6",  # monetate.retailer.ACCOUNT_FEATURES.UNIFIED_PRECOMPUTE added in 1.3.6
+        # monetate
         "monetate-monitoring",
-        "monetate-caching",
         "monetate-profile",
-        "aws-encryption-sdk",
-        "beautifulsoup4<=4.9.3",  # The final version of Beautiful Soup to support Python 2 was 4.9.3
-        "cachetools<=3.1.1",  # last version which supports both py2 and py3
-        "Cerberus",
-        "certifi<2021.0.0",  # is required by snowflake-connector-python
-        "ciso8601<=2.2.0",  # later versions stopped supporting py2
-        "decorator<=4.1.2",  # last version which supports both py2 and py3
-        "FormEncode",
-        "idna<2.9",  # is required by snowflake-connector-python, requests
-        "iso8601<=0.1.4",  # required by py2
-        "isodate",
-        "jmespath<1.0.0,>=0.7.1",  # is required by boto3, botocore
-        "Jinja2~=2.10.1",  # is required by Markupsafe
-        "jsonpath-rw",
-        # newer versions of markupdafe ask for another version of requests which isn't compatible with python-snowflake-connector
-        "MarkupSafe<=1.1.1",
-        "mock<=3.0.5",
-        "mysqlclient~=1.3.14",  # last version which supports both py2 and py3
-        "pandas<=0.23.4",  # last version which supports both py2 and py3
-        "paramiko<=2.0.9",  # last version which supports both py2 and py3
-        "pycrypto",
-        "pylibmc",
-        "pyOpenSSL<=18.0.0",  # dependency from sqlalchemy
-        "pytz<2021.0",  # strict requirement from snowflake-connector-python
-        "python-dateutil==2.8.0",
-        "requests==2.22.0",  # required by snowflake-connector to get the tests running
-        "rsa<4.6",  # is required by google-auth
-        "s3transfer<0.3.0,>=0.2.0",  # set by boto3
-        "snowflake-connector-python==2.1.3",  # 2.7.3 was failing due to pyarrow dep
-        "snowflake-sqlalchemy~=1.1.14",  # dependent on snowflake-connector-python
-        "SQLAlchemy~=1.1.4",  # dependent on snowflake-connector-python
-       ],
+        "monetate-recs>=1.5.0",
+
+        # django
+        "Django>=1.11,<2.0",
+
+        # mysql
+        "mysqlclient~=1.3.14",
+
+        # snowflake
+        "cffi<1.14",  # snowflake-connector-python wants cffi <1.14,>=1.9
+        "cryptography<3.0.0",  # snowflake-connector-python wants cryptography <3.0.0,>=1.8.2
+        "idna<2.9",  # snowflake-sqlalchemy installs idna <3.0.0, requests 2.22.0 wants idna <2.9
+        "pyOpenSSL<20.0.0",  # pyOpenSSL >=20.0.0 installs cryptography >3.2, sqlalchemy wants cryptography <3.2
+        "pytz<2021.0",  # snowflake-connector-python wants pytz<2021.0
+        "snowflake-sqlalchemy~=1.1.14",
+        "snowflake-connector-python<2.2.0",  # dropped python 2.7 support in 2.2.0
+        "SQLAlchemy<1.2",  # SQLAlchemy<2.0
+
+        # false dependencies
+        "Babel<2.10",  # monetate.retailer.utils.format_currency(), dropped python 2.7 support in 2.10
+        "boto",  # monetate.common.warehouse.sqlalchemy_warehouse
+        "django-localflavor<3.0",  # monetate.retailer.models - USStateField, dropped django 1.11 support in 3.0
+        "jsmin<3.0.0",  # monetate.retailer.models.ThirdPartyReport.save(), dropped python 2.7 support in 3.0.0
+        "monetate-caching",  # monetate.retailer.models - invalidate_bucket
+        "Pillow<7.0.0",  # monetate.retailer.models - monetate.retailer.creative, dropped python 2.7 support in 7.0.0
+    ],
     extras_require={
         "test": [
-            "bravado>=8.4.0,<8.5",
-            "coverage>=4.5.1,<4.6",
-            "factory_boy==2.4.1",
-            "hypothesis>=3.30.0,<3.31",
-            "jsonpath-rw>=1.4.0,<1.5",
-            "jsonschema>=2.6.0,<2.7",
             "mock>=2.0,<2.1",
-            "moto<=1.3.6",
-            "parameterized>=0.6.1,<0.7",
-            # pin prospector / pylint version to avoid excess lint strictness
-            "prospector==0.12.4",
-            "pylint==1.6.4",
-            "pylint_django==0.8.0",  # last working build to support Python 2 (0.8.1 doesn't work)
-            "pylint-plugin-utils<0.6",  # version 0.6 incompatible with pylint==1.6.4
-            "requests>=2.10.0,<2.11",
+            "monetate-s3",
         ]
     }
 )
