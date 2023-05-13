@@ -117,7 +117,7 @@ class RecsTestCase(SnowflakeTestCase):
         cls.conn.execute(
             """
             INSERT INTO config_account
-            (account_id, name, instance, domain, timezone, currency, archived, session_cutover_time, 
+            (account_id, name, instance, domain, timezone, currency, archived, session_cutover_time,
             retailer_id, retailer_name)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
@@ -129,7 +129,7 @@ class RecsTestCase(SnowflakeTestCase):
             INSERT INTO product_catalog
                 (retailer_id, dataset_id, id, description, image_link, item_group_id, link, price, product_type,
                  title, update_time, brand, is_bundle, color, availability, custom)
-            VALUES 
+            VALUES
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (cls.retailer_id, cls.product_catalog_id, 'SKU-00001', 'test', 'http://monetate.com/SKU-00001.jpg',
@@ -154,14 +154,14 @@ class RecsTestCase(SnowflakeTestCase):
         cls.conn.execute(
             """
             UPDATE product_catalog
-            SET custom = parse_json('{"product_category":"Daily Wear"}') 
+            SET custom = parse_json('{"product_category":"Daily Wear"}')
             WHERE id in ('SKU-00001','SKU-00002','SKU-00003','SKU-00004')
             """
         )
         cls.conn.execute(
             """
             UPDATE product_catalog
-            SET custom = parse_json('{"product_category":"Daily_Wear"}') 
+            SET custom = parse_json('{"product_category":"Daily_Wear"}')
             WHERE id in ('SKU-00005','SKU-00006')
             """
         )
@@ -273,7 +273,7 @@ class RecsTestCase(SnowflakeTestCase):
             for i, item in enumerate(expected_result):
                 self.assertEqual(item[0], actual_result['document']['data'][i]['id'])
                 self.assertEqual(item[1], actual_result['document']['data'][i]['rank'])
-       
+
     @classmethod
     def _setup_market(cls, setup):
         if setup is True:

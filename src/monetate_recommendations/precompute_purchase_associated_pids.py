@@ -60,7 +60,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{market_id
             AND p1.mid_rnd = p2.mid_rnd
             AND p1.product_id != p2.product_id
         GROUP BY 1, 2, 3
-        HAVING count(*) >= :minimum_count  
+        HAVING count(*) >= :minimum_count
         UNION ALL
         SELECT
             p1.account_id account_id,
@@ -137,7 +137,7 @@ WITH intermediate_query AS (
             AND p1.product_id != p2.product_id
             AND p1.fact_time < p2.fact_time
         GROUP BY 1, 2, 3
-        HAVING count(*) >= :minimum_count  
+        HAVING count(*) >= :minimum_count
         UNION ALL
         SELECT
             p1.account_id account_id,

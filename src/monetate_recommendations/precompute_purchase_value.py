@@ -45,7 +45,7 @@ JOIN purchase_line_value f
     AND f.fact_time BETWEEN s.start_time and s.end_time
     AND f.mid_ts = s.mid_ts
     AND f.mid_rnd = s.mid_rnd
-WHERE 
+WHERE
     s.start_time >= :begin_session_time
     AND s.start_time < :end_session_time
     AND s.account_id IN (:account_ids)
@@ -60,7 +60,7 @@ CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback_
         '' as region,
         p1.product_id,
         SUM(p1.quantity * p1.currency_unit_price * ex.rate) as subtotal
-    FROM 
+    FROM
         scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
     JOIN config_account ca
         ON ca.account_id = p1.account_id
