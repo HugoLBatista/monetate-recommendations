@@ -43,7 +43,7 @@ half_scores AS (
         p1.account_id account_id,
         p1.product_id pid1,
         p2.product_id pid2,
-        count(*) score 
+        count(*) score
     FROM scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
     JOIN scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p2
         ON p1.account_id = p2.account_id

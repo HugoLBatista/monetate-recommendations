@@ -58,7 +58,7 @@ SELECT pl30.account_id,
     pl30.country_code,
     pl30.region,
     pl7.subtotal/pl30.subtotal as subtotal
-FROM purchase_line_30 as pl30 
+FROM purchase_line_30 as pl30
 JOIN purchase_line_7 as pl7
 ON pl30.product_id = pl7.product_id
 AND pl30.country_code = pl7.country_code
@@ -88,7 +88,7 @@ SELECT
     p1.product_id,
     SUM(p1.quantity) as subtotal
 FROM scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} p1
-WHERE 
+WHERE
     p1.account_id = :account_id
     AND p1.fact_time >= :begin_7_day_session_time
     AND p1.fact_time < :end_7_day_session_time
@@ -98,7 +98,7 @@ SELECT pl30.account_id,
     pl30.region,
     pl30.product_id,
     pl7.subtotal/pl30.subtotal as subtotal
-FROM purchase_line_30 as pl30 
+FROM purchase_line_30 as pl30
 JOIN purchase_line_7 as pl7
 ON pl30.product_id = pl7.product_id
 """

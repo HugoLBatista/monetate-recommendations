@@ -96,7 +96,7 @@ MAX_FILE_SIZE=1000000000
 """
 
 SNOWFLAKE_UNLOAD_COLLAB = """
-COPY 
+COPY
 INTO :target
 FROM (
     SELECT object_construct(
@@ -158,7 +158,7 @@ MAX_FILE_SIZE=1000000000
 """
 
 SNOWFLAKE_UNLOAD_PID_PID = """
-COPY 
+COPY
 INTO :target
 FROM (
     SELECT object_construct(
@@ -189,7 +189,7 @@ MAX_FILE_SIZE=1000000000
 """
 
 DYNAMIC_FILTER_RANKS = """
-SELECT filtered_scored_records.*, 
+SELECT filtered_scored_records.*,
     TRIM(split_product_type.value::string, ' ') as split_product_type,
     ROW_NUMBER() OVER ({partition_by} ORDER BY score DESC, id) as rank
 FROM filtered_scored_records,
@@ -203,7 +203,7 @@ FROM filtered_scored_records
 """
 
 RESULT_COUNT = """
-SELECT COUNT(*) 
+SELECT COUNT(*)
 FROM scratch.recset_{account_id}_{recset_id}_ranks
 """
 
@@ -297,8 +297,8 @@ WHERE rank <= 1000
 # account_id , market_id and retailer_id create a unique key only one variable will have a value and rest will be None
 # example  6814_None_None
 PID_RANKS_BY_COLLAB_RECSET = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days} 
-AS WITH 
+CREATE TEMPORARY TABLE IF NOT EXISTS scratch.pid_ranks_{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}
+AS WITH
 score_scaling AS (
         SELECT
         max(score) AS max_raw_score,
@@ -307,13 +307,13 @@ score_scaling AS (
         greatest(max_raw_score - min_raw_score, 1) AS raw_score_range,
         0.01 as min_target,
         1000 as max_target,
-        max_target - min_target as target_range 
+        max_target - min_target as target_range
         FROM scratch.{algorithm}_{account_id}_{market_id}_{retailer_id}_{lookback_days}_{purchase_data_source}
 )
     SELECT
-        account_id, 
-        pid1 as lookup_key, 
-        pid2 as product_id, 
+        account_id,
+        pid1 as lookup_key,
+        pid2 as product_id,
         score,
         ordinal,
         round((score - score_scaling.min_raw_score) / (score_scaling.raw_score_range) /* map raw score to range [0, 1] */
@@ -362,7 +362,7 @@ SELECT
             product_type,
             TRIM(split_product_type.value::string, ' ') as split_product_type,
             ROW_NUMBER() OVER ({partition_by} ORDER BY score DESC, id DESC, lookup_key DESC) AS ordinal
-        FROM sku_algo as sa, 
+        FROM sku_algo as sa,
         LATERAL FLATTEN(input=>ARRAY_APPEND(parse_csv_string_udf(sa.product_type), '')) split_product_type
     )
     WHERE rank <= 50
@@ -389,7 +389,7 @@ WITH
       JOIN latest_catalog context
       ON pid_algo.lookup_key = context.item_group_id
     ),
-    
+
     recommendation_item_attributes AS (
         SELECT recommendation.item_group_id, max(recommendation.id) as id, recommendation.color, recommendation.image_link {recommendation_attributes}
         FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
@@ -407,7 +407,7 @@ WITH
             {should_sku_ranks_select_product_type}
          FROM scratch.pid_ranks_{algorithm}_{pid_rank_account_id}_{market_id}_{retailer_id}_{lookback_days} as pid_algo
          JOIN recommendation_item_attributes recommendation
-            ON pid_algo.product_id = recommendation.item_group_id 
+            ON pid_algo.product_id = recommendation.item_group_id
             {dynamic_filter}
         GROUP BY 1,3,4,recommendation.color,recommendation.image_link {should_sku_ranks_group_by_product_type}
     )
@@ -498,7 +498,7 @@ def parse_collab_filters(filter_json, catalog_fields):
     dynamic_supporterd_filter['filters'] = [f for f in supported_filters if f['right']['type'] == 'function']
 
     product_type_filters = [f for f in supported_filters if f['left']['field'] == 'product_type']
-    has_hashable_dynamic_product_type_filter = len([f for f in product_type_filters if f['right']['type'] == 'function' and 
+    has_hashable_dynamic_product_type_filter = len([f for f in product_type_filters if f['right']['type'] == 'function' and
                                                     f['right']['value'] != 'items_from_base_recommendation_on']) > 0
 
     return static_supported_filters, dynamic_supporterd_filter, has_hashable_dynamic_product_type_filter

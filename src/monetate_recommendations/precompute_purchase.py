@@ -8,7 +8,7 @@ from monetate.common import job_timing
 from monetate_recommendations import precompute_utils
 log.configure_script_log('precompute_purchase_algorithm')
 
-ONLINE_PURCHASE_QUERY = """ 
+ONLINE_PURCHASE_QUERY = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.{algorithm}_{account_id}_{lookback}_{market_id}_{retailer_scope}_online AS
 /* Merchandiser: {algorithm}, account {account_id}, {lookback} day,_{market_id} market, {retailer_scope} retailer_scope facts */
 SELECT
