@@ -21,7 +21,7 @@ from monetate_recommendations import supported_prefilter_expression_v3 as new_fi
 from .active import is_strategy_active
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, DATA_TYPE_TO_SNOWFLAKE_TYPE
 from .supported_prefilter_expression_v3 import FILTER_MAP
-import precompute_purchase_associated_pids
+from . import offline
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
@@ -884,7 +884,7 @@ def process_noncollab_algorithm(conn, recset, metric_table_query, offline_query=
             begin_30_day_session_time, end_30_day_session_time = sqlalchemy_warehouse.get_session_time_bounds(
                 begin_30_day_fact_time, end_30_day_fact_time
             )
-        account_ids_dataset_ids = precompute_purchase_associated_pids.get_dataset_ids_for_pos(account_ids)
+        account_ids_dataset_ids = offline.get_dataset_ids_for_pos(account_ids)
         create_helper_query_for_non_collab_algorithm(recset, account, market, retailer,
                                                        begin_fact_time, account_ids_dataset_ids, conn)
 
@@ -980,7 +980,7 @@ def create_helper_query_for_non_collab_algorithm(recset, account, market, retail
             if not account_ids_dataset_ids:
                 raise ValueError('Account/s {} has/have no offline purchase datasets'.format(account))
             conn.execute(text(
-                precompute_purchase_associated_pids.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(
+                offline.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(
                     account_id=account, market_id=market,
                     retailer_id=retailer, lookback_days=lookback_days)), begin_fact_time=begin_fact_time,
                 aids_dids=account_ids_dataset_ids)
