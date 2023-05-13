@@ -3,6 +3,7 @@ import precompute_utils
 from monetate_monitoring import log
 import monetate.retailer.models as retailer_models
 from monetate.recs.models import AccountRecommendationSetting
+from . import offline
 
 MIN_PURCHASE_THRESHOLD = 3
 
@@ -17,25 +18,6 @@ WHERE account_id in (:account_ids)
     /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
     AND product_id NOT IN ('', 'null', 'NULL')
 GROUP BY 1, 2, 3, 4, 5
-"""
-
-
-GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID = """
-CREATE TEMPORARY TABLE IF NOT EXISTS scratch.offline_purchase_per_customer_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS
-SELECT a.account_id, a.dataset_id, p.customer_id, p.product_id, p.quantity, p.currency, p.currency_unit_price, max(p.time) as fact_time
-FROM (
-    SELECT t.account_id, t.dataset_id, d.cutoff_time
-    FROM (VALUES (:aids_dids)) t(account_id, dataset_id)
-    JOIN config_dataset_data_expiration d
-    ON t.dataset_id = d.dataset_id
-) a
-JOIN dio_purchase p
-ON p.dataset_id = a.dataset_id
-    AND p.update_time >= a.cutoff_time
-    /* exclude empty string to prevent empty lookup keys, filter out common invalid values to reduce join size */
-    AND product_id NOT IN ('', 'null', 'NULL')
-GROUP BY 1, 2, 3, 4, 5, 6, 7
-HAVING fact_time >= :begin_fact_time
 """
 
 
@@ -219,19 +201,9 @@ QUERY_DISPATCH = {
 # TODO: Refactor online_offline to call online and offline helper queries
 SOURCE_DATA_DISPATCH = {
     'online': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID,
-    'offline': GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID,
-    # 'online_offline': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID + GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
+    'offline': offline.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID,
+    # 'online_offline': GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID + offline.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID
 }
-
-
-def get_dataset_ids_for_pos(account_ids):
-    # [(account_id, dataset_id), ...]
-    account_ids_dataset_ids = list(AccountRecommendationSetting.objects.filter(account_id__in=account_ids,
-                                              pos_dataset_id__isnull=False).values_list("account_id", "pos_dataset_id"))
-    # converts list of tuples into list
-    # [account_id, dataset_id]
-    flattened_aids_dids = [item for tup_list in account_ids_dataset_ids for item in tup_list]
-    return flattened_aids_dids
 
 
 def run_purchase_queries(account, account_ids, market, retailer, lookback_days, algorithm,
@@ -241,7 +213,7 @@ def run_purchase_queries(account, account_ids, market, retailer, lookback_days, 
         conn.execute(text(GET_ONLINE_LAST_PURCHASE_PER_MID_AND_PID.format(account_id=account, market_id=market,
                                                           retailer_id=retailer, lookback_days=lookback_days)),
                                                           account_ids=account_ids, begin_fact_time=begin_fact_time)
-        conn.execute(text(GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
+        conn.execute(text(offline.GET_OFFLINE_PURCHASE_PER_CUSTOMER_AND_PID.format(account_id=account, market_id=market,
                                                            retailer_id=retailer, lookback_days=lookback_days)),
                      account_ids=account_ids, begin_fact_time=begin_fact_time, aids_dids=account_ids_dataset_ids)
         conn.execute(text(QUERY_DISPATCH[algorithm][purchase_data_source].
@@ -281,7 +253,7 @@ def process_purchase_collab_algorithm(conn, queue_entry):
         if queue_entry.account \
            and queue_entry.account.has_feature(retailer_models.ACCOUNT_FEATURES.MIN_THRESHOLD_FOR_PAP_FBT) else 1
     # get account ids, dataset ids for pos [(account_id, dataset_id)...]
-    account_ids_dataset_ids = get_dataset_ids_for_pos(account_ids)
+    account_ids_dataset_ids = offline.get_dataset_ids_for_pos(account_ids)
     # we only want to run online if the account has no pos datasets
     if not account_ids_dataset_ids and queue_entry.purchase_data_source in ["online_offline", "offline"]:
         purchase_data_source = "online"

@@ -226,16 +226,16 @@ class RecsTestCase(SnowflakeTestCase):
 
         new_s3_url = get_stage_s3_uri_prefix(self.conn, new_unload_path)
 
-        with mock.patch('monetate.common.job_timing.record_job_timing'),\
-             mock.patch('contextlib.closing', return_value=self.conn),\
-             mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
-             mock.patch('sqlalchemy.engine.Connection.close'),\
-             mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
-                        autospec=True) as mock_suffix, \
-                mock.patch('monetate_recommendations.precompute_purchase_associated_pids.get_dataset_ids_for_pos') \
-                        as mock_pos_datasets, \
-                mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
-                        autospec=True) as mock_pid_suffix:
+        with mock.patch('monetate.common.job_timing.record_job_timing'), \
+            mock.patch('contextlib.closing', return_value=self.conn), \
+            mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
+            mock.patch('sqlalchemy.engine.Connection.close'), \
+            mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
+                       autospec=True) as mock_suffix, \
+            mock.patch('monetate_recommendations.offline.get_dataset_ids_for_pos') \
+                as mock_pos_datasets, \
+            mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
+                       autospec=True) as mock_pid_suffix:
             mock_pos_datasets.return_value = [self.account_id, self.account_id]
             mock_suffix.return_value = unload_path, new_unload_path, sent_time
             FUNC_MAP[algorithm]([recset])
@@ -487,15 +487,14 @@ class RecsTestCaseWithData(RecsTestCase):
             stage_s3_uris = (get_stage_s3_uri_prefix(self.conn, unload_path), get_stage_s3_uri_prefix(self.conn, new_unload_path))
             s3_urls.append(stage_s3_uris)
         with mock.patch('monetate.common.job_timing.record_job_timing'), \
-                mock.patch('monetate_recommendations.precompute_purchase_associated_pids.get_dataset_ids_for_pos') \
-                            as mock_pos_datasets, \
-                mock.patch('contextlib.closing', return_value=self.conn), \
-                mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
-                mock.patch('sqlalchemy.engine.Connection.close'), \
-                mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
-                           autospec=True) as mock_suffix, \
-                mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
-                           autospec=True) as mock_pid_suffix:
+            mock.patch('monetate_recommendations.offline.get_dataset_ids_for_pos') as mock_pos_datasets, \
+            mock.patch('contextlib.closing', return_value=self.conn), \
+            mock.patch('monetate.dio.models.Schema.active_field_set', simpleQSMock), \
+            mock.patch('sqlalchemy.engine.Connection.close'), \
+            mock.patch('monetate_recommendations.precompute_utils.create_unload_target_path',
+                       autospec=True) as mock_suffix, \
+            mock.patch('monetate_recommendations.precompute_utils.unload_target_pid_path',
+                       autospec=True) as mock_pid_suffix:
             mock_pos_datasets.return_value = [1, 2]
             mock_pid_suffix.return_value = unload_pid_path, pid_send_time
             mock_suffix.side_effect = [(unload_path, new_unload_path, sent_time) for unload_path, new_unload_path, sent_time in unload_result]
