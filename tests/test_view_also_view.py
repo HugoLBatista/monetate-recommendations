@@ -127,7 +127,7 @@ class ViewAlsoViewTestCase(RecsTestCaseWithData):
         for index, r in enumerate(recsets):
             expected_results[r.id] = expected_results_arr[index]
         self._run_collab_recs_test('view_also_view', 30, recsets,
-                                   expected_results, account=self.account) 
+                                   expected_results, account=self.account)
 
     def test_30_day_view_also_view_account_level_market(self):
         recsets = recs_models.RecommendationSet.objects.filter(

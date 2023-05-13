@@ -315,18 +315,18 @@ class PurchaseValueTestCase(RecsTestCase):
                 }
             }]
         })
-        
+
         pushdown_filter_json_arr = [
             u'{"_country_code":"ca","_region":"on","product_type":""}',
             u'{"_country_code":"ca","_region":"on","product_type":"clothing > jeans"}',
-            u'{"_country_code":"ca","_region":"on","product_type":"clothing > pants"}', 
-            u'{"_country_code":"ca","_region":"on","product_type":"test"}', 
+            u'{"_country_code":"ca","_region":"on","product_type":"clothing > pants"}',
+            u'{"_country_code":"ca","_region":"on","product_type":"test"}',
             u'{"_country_code":"us","_region":"nj","product_type":""}',
-            u'{"_country_code":"us","_region":"nj","product_type":"clothing > jeans"}', 
+            u'{"_country_code":"us","_region":"nj","product_type":"clothing > jeans"}',
             u'{"_country_code":"us","_region":"nj","product_type":"test"}',
-            u'{"_country_code":"us","_region":"pa","product_type":""}', 
-            u'{"_country_code":"us","_region":"pa","product_type":"clothing > jeans"}', 
-            u'{"_country_code":"us","_region":"pa","product_type":"clothing > pants"}', 
+            u'{"_country_code":"us","_region":"pa","product_type":""}',
+            u'{"_country_code":"us","_region":"pa","product_type":"clothing > jeans"}',
+            u'{"_country_code":"us","_region":"pa","product_type":"clothing > pants"}',
             u'{"_country_code":"us","_region":"pa","product_type":"test"}',
         ]
 
