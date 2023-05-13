@@ -1,7 +1,7 @@
 from django.core.management import BaseCommand
 from monetate_monitoring import log
-from monetate_recommendations.precompute_worker import PrecomputeWorker, DEFAULTS
 
+from monetate_recommendations.precompute_worker import PrecomputeWorker, DEFAULTS
 
 log.configure_script_log('recommendations_worker')
 

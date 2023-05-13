@@ -29,9 +29,9 @@ Compound recommendation strategy to component recommendation strategy mapping
 
 """
 from __future__ import print_function
+
 import contextlib
 import datetime
-
 from django.db import connection
 
 RECENT_INPUT_COUNT = """

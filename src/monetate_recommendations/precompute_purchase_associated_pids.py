@@ -1,9 +1,10 @@
-from sqlalchemy.sql import text
-from . import precompute_utils
-from monetate_monitoring import log
 import monetate.retailer.models as retailer_models
 from monetate.recs.models import AccountRecommendationSetting
+from monetate_monitoring import log
+from sqlalchemy.sql import text
+
 from . import offline
+from . import precompute_utils
 
 MIN_PURCHASE_THRESHOLD = 3
 

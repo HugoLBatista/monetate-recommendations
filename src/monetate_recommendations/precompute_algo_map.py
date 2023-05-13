@@ -1,9 +1,10 @@
 from collections import defaultdict
-from .precompute_view import precompute_view_algorithm
+from monetate.recs.models import RecommendationSet
+
 from .precompute_purchase import precompute_purchase_algorithm
 from .precompute_purchase_value import precompute_purchase_value_algorithm
 from .precompute_trending import precompute_trending_algorithm
-from monetate.recs.models import RecommendationSet
+from .precompute_view import precompute_view_algorithm
 
 FUNC_MAP = {
     'view': precompute_view_algorithm,

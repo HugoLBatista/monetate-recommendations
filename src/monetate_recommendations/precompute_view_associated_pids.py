@@ -1,8 +1,8 @@
-from sqlalchemy.sql import text
-from . import precompute_utils
-from monetate_monitoring import log
 import monetate.retailer.models as retailer_models
+from monetate_monitoring import log
+from sqlalchemy.sql import text
 
+from . import precompute_utils
 
 GET_EARLIEST_VIEW_PER_MID_AND_PID = """
 CREATE TEMPORARY TABLE IF NOT EXISTS scratch.earliest_view_per_mid_and_pid_{account_id}_{market_id}_{retailer_id}_{lookback_days} AS

@@ -1,5 +1,6 @@
 import json
 from monetate.test.testcases import TestCase
+
 from monetate_recommendations import precompute_utils
 
 

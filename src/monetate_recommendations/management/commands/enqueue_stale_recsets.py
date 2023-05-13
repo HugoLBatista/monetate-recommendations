@@ -1,12 +1,13 @@
 import datetime
-from django.core.management.base import BaseCommand
-from django.core.exceptions import MultipleObjectsReturned
-from django.db.models import Q
-from django.utils import timezone
-from monetate_monitoring import log
 import monetate.recs.models as recs_models
 import monetate.recs.precompute_constants as precompute_constants
 import monetate.retailer.models as retailer_models
+from django.core.exceptions import MultipleObjectsReturned
+from django.core.management.base import BaseCommand
+from django.db.models import Q
+from django.utils import timezone
+from monetate_monitoring import log
+
 from monetate_recommendations.active import is_strategy_active
 
 log.configure_script_log('enqueue_stale_recsets')

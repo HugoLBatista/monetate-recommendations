@@ -1,7 +1,7 @@
+import monetate.recs.precompute_constants as precompute_constants
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from monetate.recs.models import RecommendationSet, RecommendationsPrecompute
-import monetate.recs.precompute_constants as precompute_constants
 from monetate.retailer.models import Account
 
 

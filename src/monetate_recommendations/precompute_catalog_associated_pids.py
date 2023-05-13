@@ -1,12 +1,12 @@
 import json
-from sqlalchemy.sql import text
-from . import precompute_utils
-from monetate_monitoring import log
+import monetate.dio.models as dio_models
 import monetate.retailer.models as retailer_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
-from . import supported_weights_expression
-import monetate.dio.models as dio_models
+from monetate_monitoring import log
+from sqlalchemy.sql import text
 
+from . import precompute_utils
+from . import supported_weights_expression
 
 # Retrieving the products only if they are available in stock for the given retailer
 GET_RETAILER_PRODUCT_CATALOG = """

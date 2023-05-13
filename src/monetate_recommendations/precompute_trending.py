@@ -1,10 +1,11 @@
-from django.conf import settings
 import contextlib
 import os
+from django.conf import settings
+from monetate.common import job_timing
+from monetate_monitoring import log
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
-from monetate_monitoring import log
-from monetate.common import job_timing
+
 from . import precompute_utils
 
 log.configure_script_log('precompute_trending_algorithm')

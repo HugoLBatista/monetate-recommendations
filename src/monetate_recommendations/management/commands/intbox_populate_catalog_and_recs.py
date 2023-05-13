@@ -1,10 +1,9 @@
 import datetime
+import monetate.dio.models as dio_models
+import monetate.retailer.models as retailer_models
 from django.core.management.base import BaseCommand
 from django.db.models import Q
-
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset
-import monetate.retailer.models as retailer_models
-import monetate.dio.models as dio_models
 
 
 class Command(BaseCommand):
