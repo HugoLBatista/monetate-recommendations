@@ -267,7 +267,7 @@ class PurchaseCountTestCase(RecsTestCase):
         # TP-00003(SKU-00003): 3
         # TP-00004(SKU-00004): 1
         filter_json = json.dumps({"type": "and", "filters": []})
-        pushdown_filter_json_arr = [u'{"_country_code":"ca","_region":"on","product_type":""}', 
+        pushdown_filter_json_arr = [u'{"_country_code":"ca","_region":"on","product_type":""}',
         u'{"_country_code":"us","_region":"nj","product_type":""}', u'{"_country_code":"us","_region":"pa","product_type":""}']
         self._run_recs_test(algorithm="purchase", lookback=30, filter_json=filter_json, expected_result_arr=[
             [
