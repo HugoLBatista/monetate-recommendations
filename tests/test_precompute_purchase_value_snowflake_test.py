@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import six
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 
-from . import patch_invalidations
+from .patch import patch_invalidations
 from .testcases import RecsTestCase
 
 

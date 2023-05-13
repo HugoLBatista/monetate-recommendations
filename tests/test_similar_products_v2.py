@@ -3,7 +3,7 @@ import json
 import mock
 from datetime import datetime, timedelta
 from django.db.models import Q
-from . import patch_invalidations
+from .patch import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCaseWithData
 from monetate_caching.cache import invalidation_context

@@ -15,9 +15,9 @@ from monetate_profile.sqlalchemy_session import CLUSTER_MAX
 import monetate.retailer.models as retailer_models
 import monetate.dio.models as dio_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
-from monetate_recommendations import supported_prefilter_expression
-from monetate_recommendations import supported_prefilter_expression_v2 as filters
-from monetate_recommendations import supported_prefilter_expression_v3 as new_filters
+from . import supported_prefilter_expression
+from . import supported_prefilter_expression_v2 as filters
+from . import supported_prefilter_expression_v3 as new_filters
 from .active import is_strategy_active
 from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, DATA_TYPE_TO_SNOWFLAKE_TYPE
 from .supported_prefilter_expression_v3 import FILTER_MAP

@@ -1,10 +1,10 @@
 import json
 from sqlalchemy.sql import text
-import precompute_utils
+from . import precompute_utils
 from monetate_monitoring import log
 import monetate.retailer.models as retailer_models
 from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
-from monetate_recommendations import supported_weights_expression
+from . import supported_weights_expression
 import monetate.dio.models as dio_models
 
 
