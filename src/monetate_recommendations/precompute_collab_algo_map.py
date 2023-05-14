@@ -6,9 +6,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from monetate_monitoring import log
 from monetate.common import job_timing
-from monetate_recommendations.precompute_purchase_associated_pids import process_purchase_collab_algorithm
-from monetate_recommendations.precompute_view_associated_pids import process_view_collab_algorithm
-from monetate_recommendations.precompute_catalog_associated_pids import process_catalog_collab_algorithm
+from .precompute_purchase_associated_pids import process_purchase_collab_algorithm
+from .precompute_view_associated_pids import process_view_collab_algorithm
+from .precompute_catalog_associated_pids import process_catalog_collab_algorithm
 from monetate.recs.models import PrecomputeQueue
 
 FUNC_MAP = {
