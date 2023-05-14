@@ -1,27 +1,29 @@
-from django.conf import settings
-from django.db.models import Q
-import os
-import datetime
-import json
 import binascii
 import bisect
+import datetime
+import json
+import monetate.dio.models as dio_models
+import monetate.retailer.models as retailer_models
+import os
 import six
 from copy import deepcopy
-from sqlalchemy.sql import text
+from django.conf import settings
+from django.db.models import Q
+from monetate.common.warehouse import sqlalchemy_warehouse
+from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
 from monetate_monitoring import log
 from monetate_profile.row import get_single_value_query
-from monetate.common.warehouse import sqlalchemy_warehouse
 from monetate_profile.sqlalchemy_session import CLUSTER_MAX
-import monetate.retailer.models as retailer_models
-import monetate.dio.models as dio_models
-from monetate.recs.models import RecommendationSet, RecommendationSetDataset, AccountRecommendationSetting
+from sqlalchemy.sql import text
+
+from . import offline
 from . import supported_prefilter_expression
 from . import supported_prefilter_expression_v2 as filters
 from . import supported_prefilter_expression_v3 as new_filters
 from .active import is_strategy_active
-from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, DATA_TYPE_TO_SNOWFLAKE_TYPE
+from .precompute_constants import UNSUPPORTED_PREFILTER_FIELDS, SUPPORTED_DATA_TYPES, SUPPORTED_PREFILTER_FIELDS, \
+    DATA_TYPE_TO_SNOWFLAKE_TYPE
 from .supported_prefilter_expression_v3 import FILTER_MAP
-from . import offline
 
 DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'

@@ -1,7 +1,7 @@
 import hashlib
 import json
-from datetime import datetime, timedelta
 import six
+from datetime import datetime, timedelta
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 
 from .patch import patch_invalidations

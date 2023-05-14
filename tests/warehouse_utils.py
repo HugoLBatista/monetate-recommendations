@@ -3,10 +3,10 @@ Trimmed down version of monetate.test.warehouse_utils.
 """
 
 import datetime
-import time
 import monetate.dio.models as dio_models
-import monetate_caching.cache as retailer_cache
 import monetate.retailer.models as retailer_models
+import monetate_caching.cache as retailer_cache
+import time
 
 LONG_AGO = datetime.datetime(1970, 1, 1)
 

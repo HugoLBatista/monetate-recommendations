@@ -1,15 +1,16 @@
-from django.conf import settings
-from collections import defaultdict
 import contextlib
 import os
+from collections import defaultdict
+from django.conf import settings
+from monetate.common import job_timing
+from monetate.recs.models import PrecomputeQueue
+from monetate_monitoring import log
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
-from monetate_monitoring import log
-from monetate.common import job_timing
+
+from .precompute_catalog_associated_pids import process_catalog_collab_algorithm
 from .precompute_purchase_associated_pids import process_purchase_collab_algorithm
 from .precompute_view_associated_pids import process_view_collab_algorithm
-from .precompute_catalog_associated_pids import process_catalog_collab_algorithm
-from monetate.recs.models import PrecomputeQueue
 
 FUNC_MAP = {
     'purchase_also_purchase': process_purchase_collab_algorithm,

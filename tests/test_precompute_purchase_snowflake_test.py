@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta
-import json
 import hashlib
+import json
 import six
+from datetime import datetime, timedelta
+from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 
 from .patch import patch_invalidations
-from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from .testcases import RecsTestCase
 
 

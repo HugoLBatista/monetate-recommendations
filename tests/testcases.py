@@ -1,29 +1,29 @@
-from datetime import datetime, timedelta
-import mock
 import json
+import mock
+import monetate.dio.models as dio_models
+import monetate.recs.models as recs_models
+import monetate.retailer.models as retailer_models
+import monetate.test.testcases
+import monetate_s3.s3_filereader2 as s3_filereader2
 import os
 import random
-
+from datetime import datetime, timedelta
 from django.utils import timezone
-import monetate_s3.s3_filereader2 as s3_filereader2
 from monetate.common.warehouse.sqlalchemy_snowflake import get_stage_s3_uri_prefix
-import monetate.recs.models as recs_models
+from monetate.market.models import Market, MarketAccount
 from monetate.test.testcases import SnowflakeTestCase
-from . import warehouse_utils
+from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
+from monetate_caching.cache import invalidation_context
+
 from monetate_recommendations import precompute_utils
 from monetate_recommendations.precompute_algo_map import FUNC_MAP
 from monetate_recommendations.precompute_collab_algo_map import initialize_collab_algorithm
-import monetate.dio.models as dio_models
-from monetate_caching.cache import invalidation_context
-import monetate.retailer.models as retailer_models
-from monetate.market.models import Market, MarketAccount
-from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
 from monetate_recommendations.precompute_utils import get_account_ids_for_market_driven_recsets
+from . import warehouse_utils
 from .patch import patch_invalidations
 
 # Duct tape fix for running SnowflakeTestCase in monetate_recommendations.
 # TODO: Update monetate.test.testcases to check relative paths for both source or package.
-import monetate.test.testcases
 root_dir = os.path.dirname(monetate.__file__)
 monetate.test.testcases.snowflake_schema_path = os.path.join(root_dir, 'snowflake', 'tables', 'public')
 monetate.test.testcases.snowflake_functions_schema_path = os.path.join(root_dir, 'snowflake', 'functions')

@@ -1,13 +1,14 @@
 import hashlib
 import json
+import monetate.dio.models as dio_models
+import monetate.recs.models as recs_models
 from datetime import datetime, timedelta
 from django.db.models import Q
-from .patch import patch_invalidations
 from monetate.warehouse.fact_generator import WarehouseFactsTestGenerator
-from .testcases import RecsTestCaseWithData
 from monetate_caching.cache import invalidation_context
-import monetate.recs.models as recs_models
-import monetate.dio.models as dio_models
+
+from .patch import patch_invalidations
+from .testcases import RecsTestCaseWithData
 
 
 class BoughtTogetherTestCase(RecsTestCaseWithData):
