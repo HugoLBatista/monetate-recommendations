@@ -23,7 +23,7 @@ setup(
     description='Monetate recommendations precompute service',
     long_description=long_description,
     url='https://github.com/monetate/monetate-recommendations',
-    author='Kibo Inc.',
+    author='Monetate Inc.',
     author_email='monetate_recommendations-team@monetate.com',
     classifiers=[],
     install_requires=[
