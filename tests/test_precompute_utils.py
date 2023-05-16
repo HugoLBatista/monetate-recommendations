@@ -570,3 +570,77 @@ class PrecomputeUtilsTestCase(TestCase):
                 }
         self.assertEqual(static_filter, expected_static)
         self.assertEqual(dynamic_filter, expected_dynamic)
+
+    def test_get_item_attributes_from_filtered_catalog_with_item_group_id(self):
+        recset_filter_json = {
+            "type": "and",
+            "filters": [{
+                "type": "in",
+                "left":
+                {
+                    "type": "field",
+                    "field": "item_group_id"
+                },
+                "right":
+                {
+                    "type": "function",
+                    "value": "items_from_base_recommendation_on"
+                }
+            }]
+        }
+        global_filter_json = {
+            "type": "and",
+            "filters": []
+        }
+        catalog_fields = [
+            {
+                "name": "item_group_id",
+                "data_type": "string"
+            }
+        ]
+
+        expected_context_attributes = ""
+        expected_recommendation_attributes = ""
+        expected_recommendation_attributes_group_by = "GROUP BY recommendation.item_group_id, recommendation.color, recommendation.image_link"
+        actual_context_attributes, actual_recommendation_attributes, actual_recommendation_attributes_group_by = precompute_utils.get_item_attributes_from_filtered_catalog(
+                                                                                                    recset_filter_json, global_filter_json, catalog_fields)
+        self.assertEqual(expected_context_attributes, actual_context_attributes)
+        self.assertEqual(expected_recommendation_attributes, actual_recommendation_attributes)
+        self.assertEqual(expected_recommendation_attributes_group_by, actual_recommendation_attributes_group_by)
+
+    def test_get_item_attributes_from_filtered_catalog_with_brand(self):
+        recset_filter_json = {
+            "type": "and",
+            "filters": [{
+                "type": "in",
+                "left":
+                {
+                    "type": "field",
+                    "field": "brand"
+                },
+                "right":
+                {
+                    "type": "function",
+                    "value": "items_from_base_recommendation_on"
+                }
+            }]
+        }
+        global_filter_json = {
+            "type": "and",
+            "filters": []
+        }
+        catalog_fields = [
+            {
+                "name": "item_group_id",
+                "data_type": "string"
+            }
+        ]
+
+        expected_context_attributes = ", context.brand"
+        expected_recommendation_attributes = ", recommendation.brand"
+        expected_recommendation_attributes_group_by = "GROUP BY recommendation.item_group_id, recommendation.color, recommendation.image_link, brand"
+        actual_context_attributes, actual_recommendation_attributes, actual_recommendation_attributes_group_by = precompute_utils.get_item_attributes_from_filtered_catalog(
+                                                                                                    recset_filter_json, global_filter_json, catalog_fields)
+        self.assertEqual(expected_context_attributes, actual_context_attributes)
+        self.assertEqual(expected_recommendation_attributes, actual_recommendation_attributes)
+        self.assertEqual(expected_recommendation_attributes_group_by, actual_recommendation_attributes_group_by)

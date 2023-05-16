@@ -29,6 +29,9 @@ DATA_JURISDICTION = 'recs_global'
 DATA_JURISDICTION_PID_PID = 'recs_global_pid_pid'
 SESSION_SHARDS = 8
 MIN_PURCHASE_THRESHOLD = 3
+CONTEXT_ATTRIBUTES_ALREADY_ADDED_TO_QUERY = ['item_group_id']
+RECOMMENDATION_ATTRIBUTES_ALREADY_ADDED_TO_QUERY = ['item_group_id', 'id', 'color', 'image_link']
+RECOMMENDATION_ATTRIBUTES_ALREADY_ADDED_TO_GROUP_BY = ['item_group_id', 'color', 'image_link']
 GEO_TARGET_COLUMNS = {
     'country': ["country_code"],
     'region': ["country_code", "region"]
@@ -527,17 +530,20 @@ def get_item_attributes_from_filtered_catalog(recset_dynamic_filter, global_dyna
     dynamic_filters = recset_dynamic_filter['filters'] + global_dynamic_filter['filters']
     if dynamic_filters:
         has_custom_attributes = False
-        for each in dynamic_filters:
-            attribute = each["left"]["field"]
+        attributes = {each["left"]["field"] for each in dynamic_filters if each}
+        for attribute in attributes:
             field = "{}".format(attribute)
             if attribute not in SUPPORTED_PREFILTER_FIELDS:
                 has_custom_attributes = True
                 snowflake_type = [field["data_type"] for field in catalog_fields if field["name"] == attribute][0]
                 field = "custom:{}::{} as {}".format(attribute, snowflake_type, attribute.lower())
-
-            context_attributes += ", context.{}".format(field)
-            recommendation_attributes += ", recommendation.{}".format(field)
-            recommendation_attributes_group_by += ", {}".format(attribute.lower())
+            
+            if attribute not in CONTEXT_ATTRIBUTES_ALREADY_ADDED_TO_QUERY:
+                context_attributes += ", context.{}".format(field)
+            if attribute not in RECOMMENDATION_ATTRIBUTES_ALREADY_ADDED_TO_QUERY:
+                recommendation_attributes += ", recommendation.{}".format(field)
+            if attribute not in  RECOMMENDATION_ATTRIBUTES_ALREADY_ADDED_TO_GROUP_BY:
+                recommendation_attributes_group_by += ", {}".format(attribute.lower())
 
         if has_custom_attributes:
             context_attributes += ", context.custom"
