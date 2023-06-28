@@ -81,8 +81,12 @@ def startswith_expression(expression, catalog_fields, is_collab):
 
     field = expression["left"]["field"]
     value = expression["right"]["value"]
-    if is_collab and field == "product_type" and expression["right"]["type"] == "function":
-        return text("any_startswith_udf(parse_csv_string_udf(recommendation.product_type), parse_csv_string_udf(context.product_type))")
+    if expression["right"]["type"] == "function" and value == "items_from_base_recommendation_on":
+        if field == "product_type":
+            return text("any_startswith_udf(parse_csv_string_udf(recommendation.product_type), parse_csv_string_udf(context.product_type))")
+        else:
+            return literal_column(get_column(field, "recommendation", catalog_fields, is_collab)).startswith(
+                literal_column(get_column(field, "context", catalog_fields, is_collab)))
 
     like_statements = []
     for i in value:
@@ -158,8 +162,12 @@ def contains_expression(expression, catalog_fields, is_collab):
 
     field = expression["left"]["field"]
     value = expression["right"]["value"]
-    if is_collab and field == "product_type" and expression["right"]["type"] == "function":
-        return text("any_contains_udf(parse_csv_string_udf(recommendation.product_type), parse_csv_string_udf(context.product_type))")
+    if expression["right"]["type"] == "function" and value == "items_from_base_recommendation_on":
+        if field == "product_type":
+            return text("any_contains_udf(parse_csv_string_udf(recommendation.product_type), parse_csv_string_udf(context.product_type))")
+        else:
+            return literal_column(get_column(field, "recommendation", catalog_fields, is_collab)).contains(
+                literal_column(get_column(field, "context", catalog_fields, is_collab)))
 
     like_statements = []
     for i in value:
@@ -207,7 +215,7 @@ def direct_sql_expression(expression, catalog_fields, is_collab):
     value = expression["right"]["value"]
     # each of these direct sql expressions simply has a function that matches what we are looking for. see the mapping
     python_expr_equivalent = SQL_COMPARISON_TO_PYTHON_COMPARISON[expression["type"]]
-    if is_collab and field == 'product_type' and expression['right']['type'] == 'function':
+    if is_collab and expression['right']['type'] == 'function' and value == "items_from_base_recommendation_on":
         return literal_column(get_column(field, "recommendation", catalog_fields, is_collab)).__eq__(literal_column(get_column(field, "context", catalog_fields, is_collab)))
     # iterate through each item in the list of values and getattr to invoke the right comparison function
     statements = [getattr(literal_column(get_column(field, "lc", catalog_fields, is_collab)), python_expr_equivalent)(literal(i)) for i in value if i is not None]\
